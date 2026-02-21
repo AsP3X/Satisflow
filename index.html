@@ -59,13 +59,22 @@
     <input type="text" id="edit-dialog-name" placeholder="Building name" />
     <label for="edit-dialog-production">Production</label>
     <select id="edit-dialog-production"></select>
-    <div id="edit-dialog-mining-rate-row" class="edit-dialog-optional" style="display: none;">
-      <label for="edit-dialog-mining-rate">Mining rate</label>
-      <select id="edit-dialog-mining-rate"></select>
-    </div>
+    <label for="edit-dialog-rate">Rate (/ min)</label>
+    <input type="text" id="edit-dialog-rate" inputmode="decimal" placeholder="0" />
     <div id="edit-dialog-actions">
       <button type="button" id="edit-dialog-cancel">Cancel</button>
       <button type="button" id="edit-dialog-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="add-node-dialog-overlay">
+  <div id="add-node-dialog">
+    <h3>Add building and connect</h3>
+    <p class="add-node-dialog-hint">Choose a building to place at the drop location and connect from the previous node.</p>
+    <div id="add-node-dialog-list"></div>
+    <div id="add-node-dialog-actions">
+      <button type="button" id="add-node-dialog-cancel">Cancel</button>
     </div>
   </div>
 </div>

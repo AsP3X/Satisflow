@@ -81,8 +81,16 @@ function createNodeFromData(nd) {
   const icon = { miner: '⛏️', smelter: '♨️', constructor: '🔩', assembler: '⚙️', foundry: '🏭', refinery: '🛢️' }[type] || '';
   node.innerHTML = `
     <div class="node-header">${nd.name || icon + ' ' + (type.charAt(0).toUpperCase() + type.slice(1))}</div>
-    <div class="node-rate">${nd.rate || '0'} / min</div>
+    <div class="node-rate-wrap"><input type="text" inputmode="decimal" class="node-rate" value="${nd.rate != null ? nd.rate : '0'}" /><span class="node-rate-unit">/ min</span></div>
   `;
+  node.querySelector('.node-rate').addEventListener('input', e => {
+    node.dataset.rate = e.target.value.replace(',', '.');
+  });
+  node.querySelector('.node-rate').addEventListener('change', e => {
+    const v = parseFloat(String(e.target.value).replace(',', '.'));
+    if (!isNaN(v) && v >= 0) node.dataset.rate = String(v);
+    e.target.value = node.dataset.rate;
+  });
   const portsContainer = document.createElement('div');
   portsContainer.style.cssText = 'position:absolute;inset:0;pointer-events:auto';
   const outPort = createPort('output', 'output');
@@ -307,8 +315,16 @@ function createNode(type, x, y, icon = '') {
   const typeLabel = (type === 'foundry' ? 'Foundry' : type === 'refinery' ? 'Refinery' : type.charAt(0).toUpperCase() + type.slice(1));
   node.innerHTML = `
     <div class="node-header">${icon} ${typeLabel}</div>
-    <div class="node-rate">0 / min</div>
+    <div class="node-rate-wrap"><input type="text" inputmode="decimal" class="node-rate" value="0" /><span class="node-rate-unit">/ min</span></div>
   `;
+  node.querySelector('.node-rate').addEventListener('input', e => {
+    node.dataset.rate = e.target.value.replace(',', '.');
+  });
+  node.querySelector('.node-rate').addEventListener('change', e => {
+    const v = parseFloat(String(e.target.value).replace(',', '.'));
+    if (!isNaN(v) && v >= 0) node.dataset.rate = String(v);
+    e.target.value = node.dataset.rate;
+  });
 
   const portsContainer = document.createElement('div');
   portsContainer.style.cssText = 'position:absolute;inset:0;pointer-events:auto';
@@ -356,6 +372,8 @@ function createNode(type, x, y, icon = '') {
       });
     }
   });
+
+  return node;
 }
 
 function createPort(type, className = '') {
@@ -366,8 +384,6 @@ function createPort(type, className = '') {
 }
 
 // Mining rate options (per min) for Miner buildings
-const miningRateOptions = [ 60, 120, 240, 480 ];
-
 // Production options per building type (item label + recipe data for calculation)
 const productionOptions = {
   miner: [
@@ -434,7 +450,7 @@ function makeDraggable(el) {
 
   el.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
-    if (e.target.closest('.port')) return;
+    if (e.target.closest('.port') || e.target.closest('.node-rate')) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -525,6 +541,69 @@ let connectionPreviewLine = null;
 let connectionDragSource = null;
 let connectionDropHighlight = null;
 
+const BUILDING_TYPES = [
+  { type: 'miner', label: 'Miner Mk.1', icon: '⛏️' },
+  { type: 'smelter', label: 'Smelter', icon: '♨️' },
+  { type: 'constructor', label: 'Constructor', icon: '🔩' },
+  { type: 'assembler', label: 'Assembler', icon: '⚙️' },
+  { type: 'foundry', label: 'Foundry', icon: '🏭' },
+  { type: 'refinery', label: 'Refinery', icon: '🛢️' }
+];
+
+let addNodeDialogSourcePort = null;
+let addNodeDialogDropX = 0;
+let addNodeDialogDropY = 0;
+
+function openAddNodeDialog(sourcePort, dropX, dropY) {
+  addNodeDialogSourcePort = sourcePort;
+  addNodeDialogDropX = dropX;
+  addNodeDialogDropY = dropY;
+  const listEl = document.getElementById('add-node-dialog-list');
+  listEl.innerHTML = '';
+  BUILDING_TYPES.filter(b => b.type !== 'miner')
+    .forEach(({ type, label, icon }) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'add-node-option';
+    btn.dataset.type = type;
+    btn.dataset.icon = icon;
+    btn.innerHTML = `<span class="add-node-icon">${icon}</span><span>${label}</span>`;
+    btn.addEventListener('click', () => {
+      saveState();
+      const node = createNode(type, addNodeDialogDropX - 80, addNodeDialogDropY - 45, icon);
+      const toPort = node.querySelector('.port.input');
+      if (toPort && addNodeDialogSourcePort) {
+        const srcNode = addNodeDialogSourcePort.closest('.node');
+        if (srcNode) {
+          connections.push({
+            fromNode: srcNode.dataset.id,
+            fromPort: addNodeDialogSourcePort.className,
+            toNode: node.dataset.id,
+            toPort: toPort.className
+          });
+          drawConnection(addNodeDialogSourcePort, toPort);
+        }
+      }
+      closeAddNodeDialog();
+    });
+    listEl.appendChild(btn);
+  });
+  document.getElementById('add-node-dialog-overlay').classList.add('show');
+}
+
+function closeAddNodeDialog() {
+  document.getElementById('add-node-dialog-overlay').classList.remove('show');
+  addNodeDialogSourcePort = null;
+}
+
+document.getElementById('add-node-dialog-cancel').onclick = closeAddNodeDialog;
+document.getElementById('add-node-dialog-overlay').addEventListener('click', e => {
+  if (e.target.id === 'add-node-dialog-overlay') closeAddNodeDialog();
+});
+document.getElementById('add-node-dialog-overlay').addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeAddNodeDialog();
+});
+
 function startConnectionDrag(sourcePort, e) {
   if (connectionDragSource) return;
   connectionDragSource = sourcePort;
@@ -583,6 +662,9 @@ function startConnectionDrag(sourcePort, e) {
       } else if (targetNode === sourceNode) {
         toast('Cannot connect a node to itself');
       }
+    } else {
+      const dropPoint = getCanvasPoint(e.clientX, e.clientY);
+      openAddNodeDialog(sourcePort, dropPoint.x, dropPoint.y);
     }
 
     if (connectionPreviewLine && connectionPreviewLine.parentNode) {
@@ -688,7 +770,7 @@ document.getElementById('calc-btn').onclick = () => {
   nodes.forEach(n => {
     n.dataset.rate = '0';
     const rateEl = n.querySelector('.node-rate');
-    if (rateEl) rateEl.textContent = '0 / min';
+    if (rateEl) rateEl.value = '0';
   });
 
   const incoming = new Set(connections.map(c => c.toNode));
@@ -699,7 +781,7 @@ document.getElementById('calc-btn').onclick = () => {
     if (r) {
       n.dataset.rate = String(r.out);
       const rateEl = n.querySelector('.node-rate');
-      if (rateEl) rateEl.textContent = `${r.out} ${r.item}/min`;
+      if (rateEl) rateEl.value = String(r.out);
     }
   });
 
@@ -732,7 +814,7 @@ document.getElementById('calc-btn').onclick = () => {
 
       node.dataset.rate = String(produced);
       const rateEl = node.querySelector('.node-rate');
-      if (rateEl) rateEl.textContent = `${produced.toFixed(1)} ${recipe.item}/min`;
+      if (rateEl) rateEl.value = produced.toFixed(1);
       updated = true;
     });
   }
@@ -822,13 +904,13 @@ document.getElementById('import-file-input').addEventListener('change', e => {
 const editOverlay = document.getElementById('edit-dialog-overlay');
 const editNameInput = document.getElementById('edit-dialog-name');
 const editProductionSelect = document.getElementById('edit-dialog-production');
-const editMiningRateRow = document.getElementById('edit-dialog-mining-rate-row');
-const editMiningRateSelect = document.getElementById('edit-dialog-mining-rate');
+const editRateInput = document.getElementById('edit-dialog-rate');
 let editDialogNode = null;
 
 function openEditDialog(node) {
   editDialogNode = node;
   editNameInput.value = node.querySelector('.node-header').textContent.trim();
+  editRateInput.value = node.dataset.rate ?? node.querySelector('.node-rate')?.value ?? '0';
 
   const type = node.dataset.type;
   const opts = productionOptions[type] || [];
@@ -840,20 +922,6 @@ function openEditDialog(node) {
     editProductionSelect.appendChild(opt);
   });
   editProductionSelect.value = node.dataset.item || (opts[0] && opts[0].item) || '';
-
-  if (type === 'miner') {
-    editMiningRateRow.style.display = 'block';
-    editMiningRateSelect.innerHTML = '';
-    miningRateOptions.forEach(rate => {
-      const opt = document.createElement('option');
-      opt.value = String(rate);
-      opt.textContent = `${rate} / min`;
-      editMiningRateSelect.appendChild(opt);
-    });
-    editMiningRateSelect.value = node.dataset.miningRate || '60';
-  } else {
-    editMiningRateRow.style.display = 'none';
-  }
 
   editOverlay.classList.add('show');
   editNameInput.focus();
@@ -886,13 +954,13 @@ function saveEditDialog() {
   if (name) node.querySelector('.node-header').textContent = name;
   const item = editProductionSelect.value;
   if (item) node.dataset.item = item;
-  if (node.dataset.type === 'miner' && editMiningRateSelect.value) {
-    node.dataset.miningRate = editMiningRateSelect.value;
-  }
-  const recipe = getRecipeForNode(node);
-  if (recipe) {
-    node.dataset.rate = String(recipe.out);
-    node.querySelector('.node-rate').textContent = `${recipe.out} ${recipe.item}/min`;
+  const rateStr = String(editRateInput.value).trim().replace(',', '.');
+  const rateNum = parseFloat(rateStr);
+  if (rateStr !== '' && !isNaN(rateNum) && rateNum >= 0) {
+    node.dataset.rate = String(rateNum);
+    if (node.dataset.type === 'miner') node.dataset.miningRate = String(rateNum);
+    const rateEl = node.querySelector('.node-rate');
+    if (rateEl) rateEl.value = String(rateNum);
   }
   closeEditDialog();
 }
