@@ -138,12 +138,22 @@ function toast(message, isWarning = false) {
 }
 
 // ─── Theme (persisted) ────────────────────────────
+function updateThemeToggleIcon() {
+  const btn = document.getElementById('theme-toggle');
+  const icon = btn.querySelector('i');
+  const isDark = document.documentElement.dataset.theme !== 'light';
+  icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+  btn.title = isDark ? 'Switch to light theme' : 'Switch to dark theme';
+  btn.setAttribute('aria-label', btn.title);
+}
 const savedTheme = localStorage.getItem('satisflow-theme');
 if (savedTheme) document.documentElement.dataset.theme = savedTheme;
+updateThemeToggleIcon();
 document.getElementById('theme-toggle').onclick = () => {
   const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   document.documentElement.dataset.theme = next;
   localStorage.setItem('satisflow-theme', next);
+  updateThemeToggleIcon();
 };
 
 // ─── Zoom / Pan ──────────────────────────────────

@@ -1,0 +1,268 @@
+{
+  "machines": {
+    "miner": {
+      "name": "Miner",
+      "inputCount": 0,
+      "outputCount": 1,
+      "tiers": [
+        { "id": "mk1", "name": "Mk.1", "miningSpeed": 0.5, "maxOutputPerMin": 60 },
+        { "id": "mk2", "name": "Mk.2", "miningSpeed": 1, "maxOutputPerMin": 120 },
+        { "id": "mk3", "name": "Mk.3", "miningSpeed": 2, "maxOutputPerMin": 240 }
+      ]
+    },
+    "smelter": {
+      "name": "Smelter",
+      "inputCount": 1,
+      "outputCount": 1,
+      "tiers": [
+        { "id": "mk1", "name": "Mk.1", "craftingSpeed": 1 },
+        { "id": "mk2", "name": "Mk.2", "craftingSpeed": 2 },
+        { "id": "mk3", "name": "Mk.3", "craftingSpeed": 4 }
+      ]
+    },
+    "constructor": {
+      "name": "Constructor",
+      "inputCount": 2,
+      "outputCount": 1,
+      "tiers": [
+        { "id": "mk1", "name": "Mk.1", "craftingSpeed": 1 },
+        { "id": "mk2", "name": "Mk.2", "craftingSpeed": 2 },
+        { "id": "mk3", "name": "Mk.3", "craftingSpeed": 4 }
+      ]
+    },
+    "assembler": {
+      "name": "Assembler",
+      "inputCount": 4,
+      "outputCount": 1,
+      "tiers": [
+        { "id": "mk1", "name": "Mk.1", "craftingSpeed": 1 },
+        { "id": "mk2", "name": "Mk.2", "craftingSpeed": 2 },
+        { "id": "mk3", "name": "Mk.3", "craftingSpeed": 4 }
+      ]
+    },
+    "foundry": {
+      "name": "Foundry",
+      "inputCount": 2,
+      "outputCount": 1,
+      "tiers": [
+        { "id": "mk1", "name": "Mk.1", "craftingSpeed": 1 },
+        { "id": "mk2", "name": "Mk.2", "craftingSpeed": 2 },
+        { "id": "mk3", "name": "Mk.3", "craftingSpeed": 4 }
+      ]
+    },
+    "refinery": {
+      "name": "Refinery",
+      "inputCount": 3,
+      "outputCount": 1,
+      "tiers": [
+        { "id": "mk1", "name": "Mk.1", "craftingSpeed": 1 },
+        { "id": "mk2", "name": "Mk.2", "craftingSpeed": 2 },
+        { "id": "mk3", "name": "Mk.3", "craftingSpeed": 4 }
+      ]
+    }
+  },
+  "items": [
+    { "id": "iron_ore", "name": "Iron Ore" },
+    { "id": "copper_ore", "name": "Copper Ore" },
+    { "id": "limestone", "name": "Limestone" },
+    { "id": "coal", "name": "Coal" },
+    { "id": "caterium_ore", "name": "Caterium Ore" },
+    { "id": "iron_ingot", "name": "Iron Ingot" },
+    { "id": "copper_ingot", "name": "Copper Ingot" },
+    { "id": "caterium_ingot", "name": "Caterium Ingot" },
+    { "id": "iron_plate", "name": "Iron Plate" },
+    { "id": "iron_rod", "name": "Iron Rod" },
+    { "id": "screw", "name": "Screw" },
+    { "id": "concrete", "name": "Concrete" },
+    { "id": "copper_sheet", "name": "Copper Sheet" },
+    { "id": "reinforced_iron_plate", "name": "Reinforced Iron Plate" },
+    { "id": "modular_frame", "name": "Modular Frame" },
+    { "id": "rotor", "name": "Rotor" },
+    { "id": "smart_plating", "name": "Smart Plating" },
+    { "id": "cable", "name": "Cable" },
+    { "id": "steel_ingot", "name": "Steel Ingot" },
+    { "id": "solid_steel_ingot", "name": "Solid Steel Ingot" },
+    { "id": "plastic", "name": "Plastic" },
+    { "id": "rubber", "name": "Rubber" },
+    { "id": "fuel", "name": "Fuel" },
+    { "id": "wire", "name": "Wire" },
+    { "id": "crude_oil", "name": "Crude Oil" },
+    { "id": "water", "name": "Water" }
+  ],
+  "recipes": [
+    {
+      "id": "iron_ingot",
+      "name": "Iron Ingot",
+      "machine": "smelter",
+      "craftingTimeSeconds": 2,
+      "inputs": [{ "item": "Iron Ore", "amount": 30 }],
+      "outputs": [{ "item": "Iron Ingot", "amount": 30 }]
+    },
+    {
+      "id": "copper_ingot",
+      "name": "Copper Ingot",
+      "machine": "smelter",
+      "craftingTimeSeconds": 2,
+      "inputs": [{ "item": "Copper Ore", "amount": 30 }],
+      "outputs": [{ "item": "Copper Ingot", "amount": 30 }]
+    },
+    {
+      "id": "caterium_ingot",
+      "name": "Caterium Ingot",
+      "machine": "smelter",
+      "craftingTimeSeconds": 2,
+      "inputs": [{ "item": "Caterium Ore", "amount": 45 }],
+      "outputs": [{ "item": "Caterium Ingot", "amount": 15 }]
+    },
+    {
+      "id": "iron_plate",
+      "name": "Iron Plate",
+      "machine": "constructor",
+      "craftingTimeSeconds": 6,
+      "inputs": [{ "item": "Iron Ingot", "amount": 30 }],
+      "outputs": [{ "item": "Iron Plate", "amount": 20 }]
+    },
+    {
+      "id": "iron_rod",
+      "name": "Iron Rod",
+      "machine": "constructor",
+      "craftingTimeSeconds": 4,
+      "inputs": [{ "item": "Iron Ingot", "amount": 15 }],
+      "outputs": [{ "item": "Iron Rod", "amount": 15 }]
+    },
+    {
+      "id": "screw",
+      "name": "Screw",
+      "machine": "constructor",
+      "craftingTimeSeconds": 6,
+      "inputs": [{ "item": "Iron Rod", "amount": 10 }],
+      "outputs": [{ "item": "Screw", "amount": 40 }]
+    },
+    {
+      "id": "concrete",
+      "name": "Concrete",
+      "machine": "constructor",
+      "craftingTimeSeconds": 4,
+      "inputs": [{ "item": "Limestone", "amount": 45 }],
+      "outputs": [{ "item": "Concrete", "amount": 15 }]
+    },
+    {
+      "id": "copper_sheet",
+      "name": "Copper Sheet",
+      "machine": "constructor",
+      "craftingTimeSeconds": 6,
+      "inputs": [{ "item": "Copper Ingot", "amount": 20 }],
+      "outputs": [{ "item": "Copper Sheet", "amount": 10 }]
+    },
+    {
+      "id": "reinforced_iron_plate",
+      "name": "Reinforced Iron Plate",
+      "machine": "assembler",
+      "craftingTimeSeconds": 12,
+      "inputs": [
+        { "item": "Iron Plate", "amount": 30 },
+        { "item": "Screw", "amount": 60 }
+      ],
+      "outputs": [{ "item": "Reinforced Iron Plate", "amount": 5 }]
+    },
+    {
+      "id": "modular_frame",
+      "name": "Modular Frame",
+      "machine": "assembler",
+      "craftingTimeSeconds": 15,
+      "inputs": [
+        { "item": "Reinforced Iron Plate", "amount": 24 },
+        { "item": "Iron Rod", "amount": 12 }
+      ],
+      "outputs": [{ "item": "Modular Frame", "amount": 4 }]
+    },
+    {
+      "id": "rotor",
+      "name": "Rotor",
+      "machine": "assembler",
+      "craftingTimeSeconds": 15,
+      "inputs": [
+        { "item": "Iron Rod", "amount": 20 },
+        { "item": "Screw", "amount": 10 }
+      ],
+      "outputs": [{ "item": "Rotor", "amount": 4 }]
+    },
+    {
+      "id": "smart_plating",
+      "name": "Smart Plating",
+      "machine": "assembler",
+      "craftingTimeSeconds": 30,
+      "inputs": [
+        { "item": "Reinforced Iron Plate", "amount": 30 },
+        { "item": "Rotor", "amount": 30 }
+      ],
+      "outputs": [{ "item": "Smart Plating", "amount": 2 }]
+    },
+    {
+      "id": "cable",
+      "name": "Cable",
+      "machine": "assembler",
+      "craftingTimeSeconds": 2,
+      "inputs": [
+        { "item": "Copper Ingot", "amount": 30 },
+        { "item": "Wire", "amount": 60 }
+      ],
+      "outputs": [{ "item": "Cable", "amount": 30 }]
+    },
+    {
+      "id": "steel_ingot",
+      "name": "Steel Ingot",
+      "machine": "foundry",
+      "craftingTimeSeconds": 3,
+      "inputs": [
+        { "item": "Iron Ore", "amount": 45 },
+        { "item": "Coal", "amount": 45 }
+      ],
+      "outputs": [{ "item": "Steel Ingot", "amount": 45 }]
+    },
+    {
+      "id": "solid_steel_ingot",
+      "name": "Solid Steel Ingot",
+      "machine": "foundry",
+      "craftingTimeSeconds": 3,
+      "inputs": [
+        { "item": "Iron Ingot", "amount": 20 },
+        { "item": "Coal", "amount": 20 }
+      ],
+      "outputs": [{ "item": "Solid Steel Ingot", "amount": 60 }]
+    },
+    {
+      "id": "plastic",
+      "name": "Plastic",
+      "machine": "refinery",
+      "craftingTimeSeconds": 6,
+      "inputs": [
+        { "item": "Crude Oil", "amount": 30 },
+        { "item": "Fuel", "amount": 20 }
+      ],
+      "outputs": [{ "item": "Plastic", "amount": 20 }]
+    },
+    {
+      "id": "rubber",
+      "name": "Rubber",
+      "machine": "refinery",
+      "craftingTimeSeconds": 6,
+      "inputs": [
+        { "item": "Crude Oil", "amount": 30 },
+        { "item": "Fuel", "amount": 20 }
+      ],
+      "outputs": [{ "item": "Rubber", "amount": 20 }]
+    },
+    {
+      "id": "fuel",
+      "name": "Fuel",
+      "machine": "refinery",
+      "craftingTimeSeconds": 6,
+      "inputs": [
+        { "item": "Crude Oil", "amount": 60 },
+        { "item": "Water", "amount": 40 }
+      ],
+      "outputs": [{ "item": "Fuel", "amount": 40 }]
+    }
+  ]
+}
