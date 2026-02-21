@@ -479,7 +479,7 @@ function makeDraggable(el) {
     el.style.top  = (startTop  + dyModel) + 'px';
 
     pendingUpdateNodeId = el.dataset.id;
-    scheduleUpdateLines();
+    updateAllLines();
   };
 
   const onMouseUp = () => {
@@ -510,7 +510,7 @@ function makeDraggable(el) {
     el.style.left = (startLeft + dx) + 'px';
     el.style.top = (startTop + dy) + 'px';
     pendingUpdateNodeId = el.dataset.id;
-    scheduleUpdateLines();
+    updateAllLines();
   }, { passive: false });
   el.addEventListener('touchend', () => {
     if (!isDragging) return;
@@ -618,7 +618,11 @@ function startConnectionDrag(sourcePort, e) {
 
   const onMove = e => {
     const p2 = getCanvasPoint(e.clientX, e.clientY);
-    connectionPreviewLine.setAttribute('d', `M${p1.x},${p1.y} L${p2.x},${p2.y}`);
+    const dx = p2.x - p1.x;
+    const curvature = 0.35;
+    const hx1 = p1.x + dx * curvature;
+    const hx2 = p2.x - dx * curvature;
+    connectionPreviewLine.setAttribute('d', `M${p1.x},${p1.y} C${hx1},${p1.y} ${hx2},${p2.y} ${p2.x},${p2.y}`);
     const under = document.elementFromPoint(e.clientX, e.clientY);
     const port = under && under.classList && under.classList.contains('port') ? under : under && under.closest('.port');
     if (connectionDropHighlight) {
