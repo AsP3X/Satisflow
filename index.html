@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Satisfactory · Production Flow Designer</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+
+<header>
+  <div class="logo">Satisfactory Production Designer</div>
+  <div class="controls">
+    <button id="theme-toggle" title="Toggle theme" aria-label="Toggle dark/light theme"><i class="fas fa-moon"></i></button>
+    <button id="calc-btn">Calculate</button>
+    <button id="export-btn">Export</button>
+    <button id="import-btn">Import</button>
+  </div>
+</header>
+<input type="file" id="import-file-input" accept=".json,application/json" style="display: none" />
+
+<div id="main">
+  <aside id="sidebar">
+    <h3 class="sidebar-title">Buildings</h3>
+    <div class="palette-item" draggable="true" data-type="miner"     data-icon="⛏️"><i class="fas fa-gem"></i><div>Miner Mk.1</div></div>
+    <div class="palette-item" draggable="true" data-type="smelter"   data-icon="♨️"><i class="fas fa-fire"></i><div>Smelter</div></div>
+    <div class="palette-item" draggable="true" data-type="constructor" data-icon="🔩"><i class="fas fa-industry"></i><div>Constructor</div></div>
+    <div class="palette-item" draggable="true" data-type="assembler"  data-icon="⚙️"><i class="fas fa-cogs"></i><div>Assembler</div></div>
+    <div class="palette-item" draggable="true" data-type="foundry"   data-icon="🏭"><i class="fas fa-industry"></i><div>Foundry</div></div>
+    <div class="palette-item" draggable="true" data-type="refinery"   data-icon="🛢️"><i class="fas fa-oil-can"></i><div>Refinery</div></div>
+  </aside>
+
+  <div id="canvas-wrapper">
+    <div id="canvas">
+      <svg id="svg-container"></svg>
+    </div>
+
+    <div id="zoom-controls">
+      <button id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+      <button id="zoom-out" title="Zoom out" aria-label="Zoom out">-</button>
+      <button id="zoom-reset" title="Reset zoom" aria-label="Reset zoom to 1:1">1:1</button>
+      <button id="zoom-fit" title="Fit all" aria-label="Zoom to fit all nodes">Fit</button>
+      <button id="zoom-selection" title="Zoom selection" aria-label="Zoom to selected nodes">Sel</button>
+    </div>
+  </div>
+</div>
+
+<div id="node-context-menu">
+  <button type="button" class="ctx-item" data-action="edit"><i class="fas fa-pen"></i> Edit</button>
+  <button type="button" class="ctx-item" data-action="clear"><i class="fas fa-unlink"></i> Clear Connections</button>
+  <button type="button" class="ctx-item delete" data-action="delete"><i class="fas fa-trash"></i> Delete</button>
+</div>
+
+<div id="edit-dialog-overlay">
+  <div id="edit-dialog">
+    <h3>Edit building</h3>
+    <label for="edit-dialog-name">Name</label>
+    <input type="text" id="edit-dialog-name" placeholder="Building name" />
+    <label for="edit-dialog-production">Production</label>
+    <select id="edit-dialog-production"></select>
+    <div id="edit-dialog-mining-rate-row" class="edit-dialog-optional" style="display: none;">
+      <label for="edit-dialog-mining-rate">Mining rate</label>
+      <select id="edit-dialog-mining-rate"></select>
+    </div>
+    <div id="edit-dialog-actions">
+      <button type="button" id="edit-dialog-cancel">Cancel</button>
+      <button type="button" id="edit-dialog-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="script.js"></script>
+</body>
+</html>
