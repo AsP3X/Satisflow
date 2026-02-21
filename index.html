@@ -84,12 +84,17 @@
 </div>
 
 <div id="add-node-dialog-overlay">
-  <div id="add-node-dialog">
-    <h3 id="add-node-dialog-title">Add building</h3>
-    <p id="add-node-dialog-hint" class="add-node-dialog-hint">Choose a building to place here.</p>
-    <div id="add-node-dialog-list"></div>
-    <div id="add-node-dialog-actions">
-      <button type="button" id="add-node-dialog-cancel">Cancel</button>
+  <div id="add-node-dialog" class="add-node-dialog-card">
+    <div class="add-node-dialog-header">
+      <span class="add-node-dialog-icon" aria-hidden="true">⊕</span>
+      <div class="add-node-dialog-header-text">
+        <h3 id="add-node-dialog-title">Add building</h3>
+        <p id="add-node-dialog-hint" class="add-node-dialog-hint">Choose a building to place here.</p>
+      </div>
+    </div>
+    <div id="add-node-dialog-list" class="add-node-dialog-list"></div>
+    <div class="add-node-dialog-actions">
+      <button type="button" id="add-node-dialog-cancel" class="add-node-dialog-cancel">Cancel</button>
     </div>
   </div>
 </div>

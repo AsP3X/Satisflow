@@ -42,6 +42,7 @@ function buildConfigLookups() {
       });
     });
   }
+  // Satisfactory crafting formula: output per minute (at 100% clock) = (items per cycle / cycle time in sec) × 60. Recipe amounts = per cycle.
   for (const recipe of APP_CONFIG.recipes) {
     const machine = recipe.machine;
     if (!machine) continue;
@@ -142,25 +143,34 @@ function createNodeFromData(nd) {
   node.dataset.rate = nd.rate || '0';
   node.dataset.item = nd.item || getDefaultItem(type);
   if (type === 'miner') {
-    node.dataset.miningRate = nd.miningRate != null ? nd.miningRate : '60';
     node.dataset.oreQuality = nd.oreQuality || getMinerDefaultOreQualityId();
+    const calcRate = getMinerCalculatedRate(tier, node.dataset.oreQuality);
+    node.dataset.rate = String(calcRate);
+    node.dataset.miningRate = String(calcRate);
+  } else if (type === 'smelter') {
+    const calcRate = getCraftingMachineCalculatedRate(type, tier, node.dataset.item);
+    node.dataset.rate = String(calcRate);
   }
   const icon = MACHINE_ICONS[type] || '📦';
   const def = getMachineDef(type);
   const tierName = (def && def.tiers) ? (def.tiers.find(t => t.id === tier) || def.tiers[0])?.name || tier : '';
   const label = nd.name || `${icon} ${def?.name || type} ${tierName}`.trim();
+  const rateDisplay = hasCalculatedRate(type) ? node.dataset.rate : (nd.rate != null ? nd.rate : '0');
   node.innerHTML = `
     <div class="node-header">${label}</div>
-    <div class="node-rate-wrap"><input type="text" inputmode="decimal" class="node-rate" value="${nd.rate != null ? nd.rate : '0'}" /><span class="node-rate-unit">/ min</span></div>
+    <div class="node-rate-wrap"><input type="text" inputmode="decimal" class="node-rate" value="${rateDisplay}" ${hasCalculatedRate(type) ? 'readonly' : ''} /><span class="node-rate-unit">/ min</span></div>
   `;
-  node.querySelector('.node-rate').addEventListener('input', e => {
-    node.dataset.rate = e.target.value.replace(',', '.');
-  });
-  node.querySelector('.node-rate').addEventListener('change', e => {
-    const v = parseFloat(String(e.target.value).replace(',', '.'));
-    if (!isNaN(v) && v >= 0) node.dataset.rate = String(v);
-    e.target.value = node.dataset.rate;
-  });
+  const rateInput = node.querySelector('.node-rate');
+  if (!hasCalculatedRate(type)) {
+    rateInput.addEventListener('input', e => {
+      node.dataset.rate = e.target.value.replace(',', '.');
+    });
+    rateInput.addEventListener('change', e => {
+      const v = parseFloat(String(e.target.value).replace(',', '.'));
+      if (!isNaN(v) && v >= 0) node.dataset.rate = String(v);
+      e.target.value = node.dataset.rate;
+    });
+  }
   const portsContainer = document.createElement('div');
   portsContainer.style.cssText = 'position:absolute;inset:0;pointer-events:auto';
   portsContainer.appendChild(createPort('output', 'output'));
@@ -630,25 +640,35 @@ function buildNodeElement(type, x, y, icon, tierId) {
   node.dataset.rate = '0';
   node.dataset.item = getDefaultItem(type);
   if (type === 'miner') {
-    node.dataset.miningRate = getMinerDefaultRate(tierId);
     node.dataset.oreQuality = getMinerDefaultOreQualityId();
   }
-
   const def = getMachineDef(type);
   const tierName = (def && def.tiers) ? (def.tiers.find(t => t.id === tierId) || def.tiers[0])?.name || '' : '';
   const typeLabel = def ? `${def.name} ${tierName}`.trim() : (type.charAt(0).toUpperCase() + type.slice(1));
+  let initialRate = 0;
+  if (type === 'miner') {
+    initialRate = getMinerCalculatedRate(tierId, node.dataset.oreQuality);
+  } else if (type === 'smelter') {
+    initialRate = getCraftingMachineCalculatedRate(type, tierId, node.dataset.item);
+  }
+  const rateReadonly = hasCalculatedRate(type);
   node.innerHTML = `
     <div class="node-header">${icon} ${typeLabel}</div>
-    <div class="node-rate-wrap"><input type="text" inputmode="decimal" class="node-rate" value="0" /><span class="node-rate-unit">/ min</span></div>
+    <div class="node-rate-wrap"><input type="text" inputmode="decimal" class="node-rate" value="${initialRate}" ${rateReadonly ? 'readonly' : ''} /><span class="node-rate-unit">/ min</span></div>
   `;
-  node.querySelector('.node-rate').addEventListener('input', e => {
-    node.dataset.rate = e.target.value.replace(',', '.');
-  });
-  node.querySelector('.node-rate').addEventListener('change', e => {
-    const v = parseFloat(String(e.target.value).replace(',', '.'));
-    if (!isNaN(v) && v >= 0) node.dataset.rate = String(v);
-    e.target.value = node.dataset.rate;
-  });
+  if (rateReadonly) {
+    node.dataset.rate = String(initialRate);
+    if (type === 'miner') node.dataset.miningRate = String(initialRate);
+  } else {
+    node.querySelector('.node-rate').addEventListener('input', e => {
+      node.dataset.rate = e.target.value.replace(',', '.');
+    });
+    node.querySelector('.node-rate').addEventListener('change', e => {
+      const v = parseFloat(String(e.target.value).replace(',', '.'));
+      if (!isNaN(v) && v >= 0) node.dataset.rate = String(v);
+      e.target.value = node.dataset.rate;
+    });
+  }
 
   const portsContainer = document.createElement('div');
   portsContainer.style.cssText = 'position:absolute;inset:0;pointer-events:auto';
@@ -705,11 +725,18 @@ function createPort(type, className = '') {
   return port;
 }
 
-function getMinerDefaultRate(tierId) {
+// Satisfactory miner formula: output/min = base rate (Mk.1=60, Mk.2=120, Mk.3=240) × node purity (Impure=0.5, Normal=1, Pure=2).
+function getMinerCalculatedRate(tierId, qualityId) {
   const def = getMachineDef('miner');
-  if (!def || !def.tiers) return '60';
+  if (!def || !def.tiers) return 60;
   const tier = def.tiers.find(t => t.id === tierId) || def.tiers[0];
-  return tier && tier.maxOutputPerMin != null ? String(tier.maxOutputPerMin) : '60';
+  const maxOut = tier && tier.maxOutputPerMin != null ? tier.maxOutputPerMin : 60;
+  const mult = getMinerOreQualityMultiplier(qualityId);
+  return maxOut * mult;
+}
+
+function getMinerDefaultRate(tierId) {
+  return String(getMinerCalculatedRate(tierId, getMinerDefaultOreQualityId()));
 }
 
 function getMinerOreQualities() {
@@ -730,6 +757,22 @@ function getMinerDefaultOreQualityId() {
   return (qualities[0] && qualities[0].id) || 'normal';
 }
 
+// Satisfactory crafting: output/min = (items per cycle / cycle time in sec) × 60 × machine crafting speed (tier).
+function getCraftingMachineCalculatedRate(type, tierId, itemName) {
+  const opts = recipeListByMachine[type];
+  if (!opts || !opts.length) return 0;
+  const r = opts.find(o => o.item === itemName || o.name === itemName) || opts[0];
+  if (!r || r.out == null) return 0;
+  const def = getMachineDef(type);
+  const tier = (def && def.tiers) ? def.tiers.find(t => t.id === tierId) : null;
+  const speed = (tier && tier.craftingSpeed != null) ? tier.craftingSpeed : 1;
+  return r.out * speed;
+}
+
+function hasCalculatedRate(type) {
+  return type === 'miner' || type === 'smelter';
+}
+
 function getRecipeForNode(node) {
   const type = node.dataset.type;
   const item = node.dataset.item;
@@ -742,10 +785,8 @@ function getRecipeForNode(node) {
   const tier = (def && def.tiers) ? def.tiers.find(t => t.id === tierId) : null;
   const speed = (tier && (tier.craftingSpeed != null)) ? tier.craftingSpeed : (tier && tier.miningSpeed != null) ? tier.miningSpeed : 1;
   if (type === 'miner') {
-    const rate = parseFloat(node.dataset.miningRate, 10);
-    const baseOut = !isNaN(rate) ? rate : (tier && tier.maxOutputPerMin != null ? tier.maxOutputPerMin : 60);
-    const mult = getMinerOreQualityMultiplier(node.dataset.oreQuality);
-    return { ...r, out: baseOut * mult };
+    const out = getMinerCalculatedRate(node.dataset.tier || 'mk1', node.dataset.oreQuality);
+    return { ...r, out };
   }
   return {
     ...r,
@@ -1234,9 +1275,19 @@ let editDialogNode = null;
 function openEditDialog(node) {
   editDialogNode = node;
   editNameInput.value = node.querySelector('.node-header').textContent.trim();
-  editRateInput.value = node.dataset.rate ?? node.querySelector('.node-rate')?.value ?? '0';
 
   const type = node.dataset.type;
+  if (hasCalculatedRate(type)) {
+    const rate = type === 'miner'
+      ? getMinerCalculatedRate(node.dataset.tier || 'mk1', node.dataset.oreQuality)
+      : getCraftingMachineCalculatedRate(type, node.dataset.tier || 'mk1', node.dataset.item);
+    editRateInput.value = String(rate);
+    editRateInput.readOnly = true;
+  } else {
+    editRateInput.value = node.dataset.rate ?? node.querySelector('.node-rate')?.value ?? '0';
+    editRateInput.readOnly = false;
+  }
+
   const opts = recipeListByMachine[type] || [];
   editProductionSelect.innerHTML = '';
   opts.forEach(r => {
@@ -1247,6 +1298,19 @@ function openEditDialog(node) {
     editProductionSelect.appendChild(opt);
   });
   editProductionSelect.value = node.dataset.item || (opts[0] && (opts[0].item || opts[0].name)) || '';
+
+  if (type === 'smelter') {
+    editProductionSelect._smelterRateUpdater = () => {
+      if (editDialogNode && editDialogNode.dataset.type === 'smelter') {
+        const rate = getCraftingMachineCalculatedRate('smelter', editDialogNode.dataset.tier || 'mk1', editProductionSelect.value);
+        editRateInput.value = String(rate);
+      }
+    };
+    editProductionSelect.addEventListener('change', editProductionSelect._smelterRateUpdater);
+  } else if (editProductionSelect._smelterRateUpdater) {
+    editProductionSelect.removeEventListener('change', editProductionSelect._smelterRateUpdater);
+    editProductionSelect._smelterRateUpdater = null;
+  }
 
   if (editOreQualityWrap && editOreQualitySelect) {
     if (type === 'miner') {
@@ -1285,6 +1349,10 @@ function openEditDialog(node) {
 function closeEditDialog() {
   editOverlay.classList.remove('show');
   editOverlay.removeEventListener('keydown', editOverlay._focusTrap);
+  if (editProductionSelect._smelterRateUpdater) {
+    editProductionSelect.removeEventListener('change', editProductionSelect._smelterRateUpdater);
+    editProductionSelect._smelterRateUpdater = null;
+  }
   editDialogNode = null;
 }
 
@@ -1295,17 +1363,26 @@ function saveEditDialog() {
   if (name) node.querySelector('.node-header').textContent = name;
   const item = editProductionSelect.value;
   if (item) node.dataset.item = item;
-  const rateStr = String(editRateInput.value).trim().replace(',', '.');
-  const rateNum = parseFloat(rateStr);
-  if (rateStr !== '' && !isNaN(rateNum) && rateNum >= 0) {
-    node.dataset.rate = String(rateNum);
-    if (node.dataset.type === 'miner') node.dataset.miningRate = String(rateNum);
+  if (hasCalculatedRate(node.dataset.type)) {
+    if (node.dataset.type === 'miner' && editOreQualitySelect) {
+      const qualityId = editOreQualitySelect.value;
+      if (qualityId) node.dataset.oreQuality = qualityId;
+    }
+    const rate = node.dataset.type === 'miner'
+      ? getMinerCalculatedRate(node.dataset.tier || 'mk1', node.dataset.oreQuality)
+      : getCraftingMachineCalculatedRate(node.dataset.type, node.dataset.tier || 'mk1', node.dataset.item);
+    node.dataset.rate = String(rate);
+    if (node.dataset.type === 'miner') node.dataset.miningRate = String(rate);
     const rateEl = node.querySelector('.node-rate');
-    if (rateEl) rateEl.value = String(rateNum);
-  }
-  if (node.dataset.type === 'miner' && editOreQualitySelect) {
-    const qualityId = editOreQualitySelect.value;
-    if (qualityId) node.dataset.oreQuality = qualityId;
+    if (rateEl) rateEl.value = String(rate);
+  } else {
+    const rateStr = String(editRateInput.value).trim().replace(',', '.');
+    const rateNum = parseFloat(rateStr);
+    if (rateStr !== '' && !isNaN(rateNum) && rateNum >= 0) {
+      node.dataset.rate = String(rateNum);
+      const rateEl = node.querySelector('.node-rate');
+      if (rateEl) rateEl.value = String(rateNum);
+    }
   }
   closeEditDialog();
 }
@@ -1434,7 +1511,7 @@ ctxMenu.querySelectorAll('.ctx-item[data-action]').forEach(btn => {
 
 // ─── Load config and init ────────────────────────
 // Inline default config so the app works when opened as file:// (fetch is blocked)
-const DEFAULT_CONFIG = {"machines":{"miner":{"name":"Miner","inputCount":0,"outputCount":1,"oreQualities":[{"id":"impure","name":"Impure","multiplier":0.5},{"id":"normal","name":"Normal","multiplier":1},{"id":"pure","name":"Pure","multiplier":2}],"tiers":[{"id":"mk1","name":"Mk.1","miningSpeed":0.5,"maxOutputPerMin":60},{"id":"mk2","name":"Mk.2","miningSpeed":1,"maxOutputPerMin":120},{"id":"mk3","name":"Mk.3","miningSpeed":2,"maxOutputPerMin":240}]},"smelter":{"name":"Smelter","inputCount":1,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"constructor":{"name":"Constructor","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"assembler":{"name":"Assembler","inputCount":4,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"foundry":{"name":"Foundry","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"refinery":{"name":"Refinery","inputCount":3,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]}},"items":[{"id":"iron_ore","name":"Iron Ore"},{"id":"copper_ore","name":"Copper Ore"},{"id":"limestone","name":"Limestone"},{"id":"coal","name":"Coal"},{"id":"caterium_ore","name":"Caterium Ore"},{"id":"iron_ingot","name":"Iron Ingot"},{"id":"copper_ingot","name":"Copper Ingot"},{"id":"caterium_ingot","name":"Caterium Ingot"},{"id":"iron_plate","name":"Iron Plate"},{"id":"iron_rod","name":"Iron Rod"},{"id":"screw","name":"Screw"},{"id":"concrete","name":"Concrete"},{"id":"copper_sheet","name":"Copper Sheet"},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate"},{"id":"modular_frame","name":"Modular Frame"},{"id":"rotor","name":"Rotor"},{"id":"smart_plating","name":"Smart Plating"},{"id":"cable","name":"Cable"},{"id":"steel_ingot","name":"Steel Ingot"},{"id":"solid_steel_ingot","name":"Solid Steel Ingot"},{"id":"plastic","name":"Plastic"},{"id":"rubber","name":"Rubber"},{"id":"fuel","name":"Fuel"},{"id":"wire","name":"Wire"},{"id":"crude_oil","name":"Crude Oil"},{"id":"water","name":"Water"}],"recipes":[{"id":"iron_ingot","name":"Iron Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Iron Ore","amount":30}],"outputs":[{"item":"Iron Ingot","amount":30}]},{"id":"copper_ingot","name":"Copper Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ore","amount":30}],"outputs":[{"item":"Copper Ingot","amount":30}]},{"id":"caterium_ingot","name":"Caterium Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Caterium Ore","amount":45}],"outputs":[{"item":"Caterium Ingot","amount":15}]},{"id":"iron_plate","name":"Iron Plate","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Ingot","amount":30}],"outputs":[{"item":"Iron Plate","amount":20}]},{"id":"iron_rod","name":"Iron Rod","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Iron Ingot","amount":15}],"outputs":[{"item":"Iron Rod","amount":15}]},{"id":"screw","name":"Screw","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Rod","amount":10}],"outputs":[{"item":"Screw","amount":40}]},{"id":"concrete","name":"Concrete","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Limestone","amount":45}],"outputs":[{"item":"Concrete","amount":15}]},{"id":"copper_sheet","name":"Copper Sheet","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Copper Ingot","amount":20}],"outputs":[{"item":"Copper Sheet","amount":10}]},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate","machine":"assembler","craftingTimeSeconds":12,"inputs":[{"item":"Iron Plate","amount":30},{"item":"Screw","amount":60}],"outputs":[{"item":"Reinforced Iron Plate","amount":5}]},{"id":"modular_frame","name":"Modular Frame","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Reinforced Iron Plate","amount":24},{"item":"Iron Rod","amount":12}],"outputs":[{"item":"Modular Frame","amount":4}]},{"id":"rotor","name":"Rotor","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Iron Rod","amount":20},{"item":"Screw","amount":10}],"outputs":[{"item":"Rotor","amount":4}]},{"id":"smart_plating","name":"Smart Plating","machine":"assembler","craftingTimeSeconds":30,"inputs":[{"item":"Reinforced Iron Plate","amount":30},{"item":"Rotor","amount":30}],"outputs":[{"item":"Smart Plating","amount":2}]},{"id":"cable","name":"Cable","machine":"assembler","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ingot","amount":30},{"item":"Wire","amount":60}],"outputs":[{"item":"Cable","amount":30}]},{"id":"steel_ingot","name":"Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ore","amount":45},{"item":"Coal","amount":45}],"outputs":[{"item":"Steel Ingot","amount":45}]},{"id":"solid_steel_ingot","name":"Solid Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ingot","amount":20},{"item":"Coal","amount":20}],"outputs":[{"item":"Solid Steel Ingot","amount":60}]},{"id":"plastic","name":"Plastic","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Plastic","amount":20}]},{"id":"rubber","name":"Rubber","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Rubber","amount":20}]},{"id":"fuel","name":"Fuel","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":60},{"item":"Water","amount":40}],"outputs":[{"item":"Fuel","amount":40}]}]};
+const DEFAULT_CONFIG = {"machines":{"miner":{"name":"Miner","inputCount":0,"outputCount":1,"oreQualities":[{"id":"impure","name":"Impure","multiplier":0.5},{"id":"normal","name":"Normal","multiplier":1},{"id":"pure","name":"Pure","multiplier":2}],"tiers":[{"id":"mk1","name":"Mk.1","miningSpeed":0.5,"maxOutputPerMin":60},{"id":"mk2","name":"Mk.2","miningSpeed":1,"maxOutputPerMin":120},{"id":"mk3","name":"Mk.3","miningSpeed":2,"maxOutputPerMin":240}]},"smelter":{"name":"Smelter","inputCount":1,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"constructor":{"name":"Constructor","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"assembler":{"name":"Assembler","inputCount":4,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"foundry":{"name":"Foundry","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"refinery":{"name":"Refinery","inputCount":3,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]}},"items":[{"id":"iron_ore","name":"Iron Ore"},{"id":"copper_ore","name":"Copper Ore"},{"id":"limestone","name":"Limestone"},{"id":"coal","name":"Coal"},{"id":"caterium_ore","name":"Caterium Ore"},{"id":"iron_ingot","name":"Iron Ingot"},{"id":"copper_ingot","name":"Copper Ingot"},{"id":"caterium_ingot","name":"Caterium Ingot"},{"id":"iron_plate","name":"Iron Plate"},{"id":"iron_rod","name":"Iron Rod"},{"id":"screw","name":"Screw"},{"id":"concrete","name":"Concrete"},{"id":"copper_sheet","name":"Copper Sheet"},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate"},{"id":"modular_frame","name":"Modular Frame"},{"id":"rotor","name":"Rotor"},{"id":"smart_plating","name":"Smart Plating"},{"id":"cable","name":"Cable"},{"id":"steel_ingot","name":"Steel Ingot"},{"id":"solid_steel_ingot","name":"Solid Steel Ingot"},{"id":"plastic","name":"Plastic"},{"id":"rubber","name":"Rubber"},{"id":"fuel","name":"Fuel"},{"id":"wire","name":"Wire"},{"id":"crude_oil","name":"Crude Oil"},{"id":"water","name":"Water"}],"recipes":[{"id":"iron_ore","name":"Iron Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Iron Ore","amount":60}]},{"id":"copper_ore","name":"Copper Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Copper Ore","amount":60}]},{"id":"limestone","name":"Limestone","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Limestone","amount":60}]},{"id":"coal","name":"Coal","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Coal","amount":60}]},{"id":"caterium_ore","name":"Caterium Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Caterium Ore","amount":60}]},{"id":"iron_ingot","name":"Iron Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Iron Ore","amount":1}],"outputs":[{"item":"Iron Ingot","amount":1}]},{"id":"copper_ingot","name":"Copper Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ore","amount":1}],"outputs":[{"item":"Copper Ingot","amount":1}]},{"id":"caterium_ingot","name":"Caterium Ingot","machine":"smelter","craftingTimeSeconds":4,"inputs":[{"item":"Caterium Ore","amount":3}],"outputs":[{"item":"Caterium Ingot","amount":1}]},{"id":"iron_plate","name":"Iron Plate","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Ingot","amount":30}],"outputs":[{"item":"Iron Plate","amount":20}]},{"id":"iron_rod","name":"Iron Rod","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Iron Ingot","amount":15}],"outputs":[{"item":"Iron Rod","amount":15}]},{"id":"screw","name":"Screw","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Rod","amount":10}],"outputs":[{"item":"Screw","amount":40}]},{"id":"concrete","name":"Concrete","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Limestone","amount":45}],"outputs":[{"item":"Concrete","amount":15}]},{"id":"copper_sheet","name":"Copper Sheet","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Copper Ingot","amount":20}],"outputs":[{"item":"Copper Sheet","amount":10}]},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate","machine":"assembler","craftingTimeSeconds":12,"inputs":[{"item":"Iron Plate","amount":30},{"item":"Screw","amount":60}],"outputs":[{"item":"Reinforced Iron Plate","amount":5}]},{"id":"modular_frame","name":"Modular Frame","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Reinforced Iron Plate","amount":24},{"item":"Iron Rod","amount":12}],"outputs":[{"item":"Modular Frame","amount":4}]},{"id":"rotor","name":"Rotor","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Iron Rod","amount":20},{"item":"Screw","amount":10}],"outputs":[{"item":"Rotor","amount":4}]},{"id":"smart_plating","name":"Smart Plating","machine":"assembler","craftingTimeSeconds":30,"inputs":[{"item":"Reinforced Iron Plate","amount":30},{"item":"Rotor","amount":30}],"outputs":[{"item":"Smart Plating","amount":2}]},{"id":"cable","name":"Cable","machine":"assembler","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ingot","amount":30},{"item":"Wire","amount":60}],"outputs":[{"item":"Cable","amount":30}]},{"id":"steel_ingot","name":"Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ore","amount":45},{"item":"Coal","amount":45}],"outputs":[{"item":"Steel Ingot","amount":45}]},{"id":"solid_steel_ingot","name":"Solid Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ingot","amount":20},{"item":"Coal","amount":20}],"outputs":[{"item":"Solid Steel Ingot","amount":60}]},{"id":"plastic","name":"Plastic","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Plastic","amount":20}]},{"id":"rubber","name":"Rubber","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Rubber","amount":20}]},{"id":"fuel","name":"Fuel","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":60},{"item":"Water","amount":40}],"outputs":[{"item":"Fuel","amount":40}]}]};
 
 function init() {
   setupCanvasContextMenu();

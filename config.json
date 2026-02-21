@@ -96,28 +96,68 @@
   ],
   "recipes": [
     {
+      "id": "iron_ore",
+      "name": "Iron Ore",
+      "machine": "miner",
+      "craftingTimeSeconds": 1,
+      "inputs": [],
+      "outputs": [{ "item": "Iron Ore", "amount": 60 }]
+    },
+    {
+      "id": "copper_ore",
+      "name": "Copper Ore",
+      "machine": "miner",
+      "craftingTimeSeconds": 1,
+      "inputs": [],
+      "outputs": [{ "item": "Copper Ore", "amount": 60 }]
+    },
+    {
+      "id": "limestone",
+      "name": "Limestone",
+      "machine": "miner",
+      "craftingTimeSeconds": 1,
+      "inputs": [],
+      "outputs": [{ "item": "Limestone", "amount": 60 }]
+    },
+    {
+      "id": "coal",
+      "name": "Coal",
+      "machine": "miner",
+      "craftingTimeSeconds": 1,
+      "inputs": [],
+      "outputs": [{ "item": "Coal", "amount": 60 }]
+    },
+    {
+      "id": "caterium_ore",
+      "name": "Caterium Ore",
+      "machine": "miner",
+      "craftingTimeSeconds": 1,
+      "inputs": [],
+      "outputs": [{ "item": "Caterium Ore", "amount": 60 }]
+    },
+    {
       "id": "iron_ingot",
       "name": "Iron Ingot",
       "machine": "smelter",
       "craftingTimeSeconds": 2,
-      "inputs": [{ "item": "Iron Ore", "amount": 30 }],
-      "outputs": [{ "item": "Iron Ingot", "amount": 30 }]
+      "inputs": [{ "item": "Iron Ore", "amount": 1 }],
+      "outputs": [{ "item": "Iron Ingot", "amount": 1 }]
     },
     {
       "id": "copper_ingot",
       "name": "Copper Ingot",
       "machine": "smelter",
       "craftingTimeSeconds": 2,
-      "inputs": [{ "item": "Copper Ore", "amount": 30 }],
-      "outputs": [{ "item": "Copper Ingot", "amount": 30 }]
+      "inputs": [{ "item": "Copper Ore", "amount": 1 }],
+      "outputs": [{ "item": "Copper Ingot", "amount": 1 }]
     },
     {
       "id": "caterium_ingot",
       "name": "Caterium Ingot",
       "machine": "smelter",
-      "craftingTimeSeconds": 2,
-      "inputs": [{ "item": "Caterium Ore", "amount": 45 }],
-      "outputs": [{ "item": "Caterium Ingot", "amount": 15 }]
+      "craftingTimeSeconds": 4,
+      "inputs": [{ "item": "Caterium Ore", "amount": 3 }],
+      "outputs": [{ "item": "Caterium Ingot", "amount": 1 }]
     },
     {
       "id": "iron_plate",
