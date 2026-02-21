@@ -17,6 +17,57 @@ const MAX_UNDO = 50;
 let undoStack = [];
 let redoStack = [];
 
+// Config loaded from config.json
+let APP_CONFIG = null;
+let machinesList = [];
+let recipesByMachine = {};
+let recipeListByMachine = {};
+
+const MACHINE_ICONS = { miner: '⛏️', smelter: '♨️', constructor: '🔩', assembler: '⚙️', foundry: '🏭', refinery: '🛢️' };
+
+function buildConfigLookups() {
+  if (!APP_CONFIG || !APP_CONFIG.machines || !APP_CONFIG.recipes) return;
+  machinesList = [];
+  recipesByMachine = {};
+  recipeListByMachine = {};
+  for (const [type, def] of Object.entries(APP_CONFIG.machines)) {
+    const name = def.name || type;
+    (def.tiers || []).forEach(tier => {
+      machinesList.push({
+        type,
+        tierId: tier.id || 'mk1',
+        tierName: tier.name || 'Mk.1',
+        label: `${name} ${tier.name || ''}`.trim(),
+        icon: MACHINE_ICONS[type] || '📦'
+      });
+    });
+  }
+  for (const recipe of APP_CONFIG.recipes) {
+    const machine = recipe.machine;
+    if (!machine) continue;
+    if (!Array.isArray(recipesByMachine[machine])) recipesByMachine[machine] = [];
+    const out = recipe.outputs && recipe.outputs[0];
+    const outPerMin = out ? (out.amount / recipe.craftingTimeSeconds) * 60 : 0;
+    const ins = (recipe.inputs || []).map(inp => ({ item: inp.item, amount: (inp.amount / recipe.craftingTimeSeconds) * 60 }));
+    const r = {
+      id: recipe.id,
+      name: recipe.name,
+      item: out?.item || recipe.name,
+      craftingTimeSeconds: recipe.craftingTimeSeconds,
+      inputs: recipe.inputs || [],
+      outputs: recipe.outputs || [],
+      in: ins[0]?.amount,
+      in2: ins[1]?.amount,
+      in3: ins[2]?.amount,
+      in4: ins[3]?.amount,
+      out: outPerMin
+    };
+    recipesByMachine[machine].push(r);
+    if (!Array.isArray(recipeListByMachine[machine])) recipeListByMachine[machine] = [];
+    recipeListByMachine[machine].push(r);
+  }
+}
+
 function saveState() {
   undoStack.push(serializeState());
   if (undoStack.length > MAX_UNDO) undoStack.shift();
@@ -27,11 +78,13 @@ function serializeState() {
     nodes: nodes.map(n => ({
       id: n.dataset.id,
       type: n.dataset.type,
+      tier: n.dataset.tier,
       x: parseFloat(n.style.left),
       y: parseFloat(n.style.top),
       rate: n.dataset.rate,
       item: n.dataset.item,
       miningRate: n.dataset.miningRate,
+      oreQuality: n.dataset.oreQuality,
       name: n.querySelector('.node-header')?.textContent?.trim()
     })),
     connections: connections.map(c => ({ ...c })),
@@ -67,20 +120,37 @@ function restoreState(state) {
   });
   updateAllLines();
 }
+function getMachineDef(type) {
+  return APP_CONFIG && APP_CONFIG.machines ? APP_CONFIG.machines[type] : null;
+}
+
+function getInputCount(type) {
+  const def = getMachineDef(type);
+  return def && def.inputCount != null ? def.inputCount : (type === 'miner' ? 0 : type === 'smelter' ? 1 : type === 'constructor' ? 2 : type === 'assembler' ? 4 : type === 'foundry' ? 2 : 3);
+}
+
 function createNodeFromData(nd) {
   const type = nd.type || 'miner';
+  const tier = nd.tier || 'mk1';
   const node = document.createElement('div');
   node.className = 'node';
   node.style.left = (nd.x || 0) + 'px';
   node.style.top = (nd.y || 0) + 'px';
   node.dataset.id = String(nd.id);
   node.dataset.type = type;
+  node.dataset.tier = tier;
   node.dataset.rate = nd.rate || '0';
   node.dataset.item = nd.item || getDefaultItem(type);
-  if (type === 'miner') node.dataset.miningRate = nd.miningRate || '60';
-  const icon = { miner: '⛏️', smelter: '♨️', constructor: '🔩', assembler: '⚙️', foundry: '🏭', refinery: '🛢️' }[type] || '';
+  if (type === 'miner') {
+    node.dataset.miningRate = nd.miningRate != null ? nd.miningRate : '60';
+    node.dataset.oreQuality = nd.oreQuality || getMinerDefaultOreQualityId();
+  }
+  const icon = MACHINE_ICONS[type] || '📦';
+  const def = getMachineDef(type);
+  const tierName = (def && def.tiers) ? (def.tiers.find(t => t.id === tier) || def.tiers[0])?.name || tier : '';
+  const label = nd.name || `${icon} ${def?.name || type} ${tierName}`.trim();
   node.innerHTML = `
-    <div class="node-header">${nd.name || icon + ' ' + (type.charAt(0).toUpperCase() + type.slice(1))}</div>
+    <div class="node-header">${label}</div>
     <div class="node-rate-wrap"><input type="text" inputmode="decimal" class="node-rate" value="${nd.rate != null ? nd.rate : '0'}" /><span class="node-rate-unit">/ min</span></div>
   `;
   node.querySelector('.node-rate').addEventListener('input', e => {
@@ -93,12 +163,9 @@ function createNodeFromData(nd) {
   });
   const portsContainer = document.createElement('div');
   portsContainer.style.cssText = 'position:absolute;inset:0;pointer-events:auto';
-  const outPort = createPort('output', 'output');
-  portsContainer.appendChild(outPort);
-  if (type !== 'miner') {
-    const inputCount = type === 'smelter' ? 1 : type === 'constructor' ? 2 : type === 'assembler' ? 4 : type === 'foundry' ? 2 : 3;
-    for (let i = 1; i <= inputCount; i++) portsContainer.appendChild(createPort('input', 'input-' + i));
-  }
+  portsContainer.appendChild(createPort('output', 'output'));
+  const inputCount = getInputCount(type);
+  for (let i = 1; i <= inputCount; i++) portsContainer.appendChild(createPort('input', 'input-' + i));
   node.appendChild(portsContainer);
   canvas.appendChild(node);
   makeDraggable(node);
@@ -289,40 +356,287 @@ document.addEventListener('keydown', e => {
 });
 
 // ─── Node Creation ───────────────────────────────
-document.querySelectorAll('.palette-item').forEach(item => {
-  item.addEventListener('dragstart', e => {
-    e.dataTransfer.setData('type', item.dataset.type);
-    e.dataTransfer.setData('icon', item.dataset.icon || '');
-  });
-});
-
 wrapper.addEventListener('dragover', e => e.preventDefault());
 wrapper.addEventListener('drop', e => {
   e.preventDefault();
+  const fromStorage = e.dataTransfer.getData('from-storage');
+  const nodeId = e.dataTransfer.getData('node-id');
+  if (fromStorage && nodeId) {
+    const storageList = document.getElementById('node-storage-list');
+    const node = storageList && storageList.querySelector(`[data-id="${nodeId}"]`);
+    if (node) {
+      const pt = getCanvasPoint(e.clientX, e.clientY);
+      const x = pt.x - 80;
+      const y = pt.y - 45;
+      node.style.left = x + 'px';
+      node.style.top = y + 'px';
+      node.classList.remove('node-in-storage');
+      node.draggable = false;
+      node.removeAttribute('draggable');
+      storageList.removeChild(node);
+      canvas.appendChild(node);
+      nodes.push(node);
+      nodeById.set(node.dataset.id, node);
+      makeDraggable(node);
+      node.addEventListener('dblclick', () => editNode(node));
+      node.addEventListener('contextmenu', ev => showNodeContextMenu(ev, node));
+      node.addEventListener('mousedown', ev => { if (ev.button === 0 && !ev.target.closest('.port')) selectNode(node, ev.shiftKey); });
+      node.querySelectorAll('.port').forEach(port => {
+        if (port.dataset.portType === 'output') {
+          port.addEventListener('mousedown', ev => {
+            if (ev.button !== 0) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            startConnectionDrag(port, ev);
+          });
+        }
+      });
+      saveState();
+    }
+    return;
+  }
   const type = e.dataTransfer.getData('type');
+  const tier = e.dataTransfer.getData('tier') || 'mk1';
   if (!type) return;
   const rect = wrapper.getBoundingClientRect();
   let x = (e.clientX - rect.left - translateX) / scale - 80;
   let y = (e.clientY - rect.top  - translateY) / scale - 45;
   saveState();
-  createNode(type, x, y, e.dataTransfer.getData('icon'));
+  createNode(type, x, y, e.dataTransfer.getData('icon') || MACHINE_ICONS[type], tier);
 });
 wrapper.addEventListener('mousedown', e => {
   if (e.target === wrapper || e.target.closest('#canvas') && !e.target.closest('.node')) deselectAll();
 });
 
-function createNode(type, x, y, icon = '') {
+let canvasContextMenuDropX = 0;
+let canvasContextMenuDropY = 0;
+let lastCanvasRightclickClientX = 0;
+let lastCanvasRightclickClientY = 0;
+
+let canvasContextMenuData = { categories: [], byType: {}, selectedType: null };
+
+function renderCanvasContextMenuItems() {
+  const itemsEl = document.getElementById('canvas-context-menu-items');
+  const searchEl = document.getElementById('canvas-context-menu-search');
+  const query = (searchEl && searchEl.value) ? searchEl.value.trim().toLowerCase() : '';
+  const type = canvasContextMenuData.selectedType;
+  if (!itemsEl || !type) return;
+  const items = canvasContextMenuData.byType[type] || [];
+  const filtered = query
+    ? items.filter(m => (m.label || '').toLowerCase().includes(query))
+    : items;
+  itemsEl.innerHTML = '';
+  filtered.forEach(({ type: machineType, tierId, label, icon }) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ctx-item';
+    btn.innerHTML = `<span class="ctx-item-icon">${icon}</span><span class="ctx-item-label">${label}</span>`;
+    btn.addEventListener('click', ev => {
+      ev.stopPropagation();
+      saveState();
+      createNodeInStorage(machineType, icon, tierId);
+    });
+    itemsEl.appendChild(btn);
+  });
+}
+
+function openNodeWindow(clientX, clientY) {
+  const pt = getCanvasPoint(clientX, clientY);
+  canvasContextMenuDropX = pt.x;
+  canvasContextMenuDropY = pt.y;
+  const menu = document.getElementById('canvas-context-menu');
+  const categoriesEl = document.getElementById('canvas-context-menu-categories');
+  const itemsEl = document.getElementById('canvas-context-menu-items');
+  const searchEl = document.getElementById('canvas-context-menu-search');
+  if (!menu || !categoriesEl || !itemsEl) return;
+
+  const machineOrder = APP_CONFIG && APP_CONFIG.machines ? Object.keys(APP_CONFIG.machines) : [];
+  const byType = {};
+  machinesList.forEach(m => {
+    if (!Array.isArray(byType[m.type])) byType[m.type] = [];
+    byType[m.type].push(m);
+  });
+  const categories = [];
+  machineOrder.forEach(type => {
+    const items = byType[type];
+    if (!items || !items.length) return;
+    const def = getMachineDef(type);
+    const categoryName = def ? def.name : (type.charAt(0).toUpperCase() + type.slice(1));
+    categories.push({ type, name: categoryName });
+  });
+
+  canvasContextMenuData = { categories, byType, selectedType: categories[0] ? categories[0].type : null };
+
+  categoriesEl.innerHTML = '';
+  categories.forEach(({ type, name }) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ctx-category-btn';
+    btn.dataset.type = type;
+    btn.textContent = name;
+    if (type === canvasContextMenuData.selectedType) btn.classList.add('active');
+    btn.addEventListener('click', ev => {
+      ev.stopPropagation();
+      canvasContextMenuData.selectedType = type;
+      categoriesEl.querySelectorAll('.ctx-category-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderCanvasContextMenuItems();
+    });
+    categoriesEl.appendChild(btn);
+  });
+
+  if (searchEl) {
+    searchEl.value = '';
+    searchEl.oninput = () => renderCanvasContextMenuItems();
+  }
+  renderCanvasContextMenuItems();
+
+  menu.style.left = clientX + 'px';
+  menu.style.top = clientY + 'px';
+  menu.style.width = '1120px';
+  menu.style.height = '630px';
+  menu.classList.add('show');
+  setTimeout(() => { if (searchEl) searchEl.focus(); }, 0);
+}
+
+function closeCanvasContextMenu() {
+  const menu = document.getElementById('canvas-context-menu');
+  if (menu) {
+    menu.classList.remove('show');
+    if (menu._outsideClickHandler) {
+      document.removeEventListener('click', menu._outsideClickHandler);
+      menu._outsideClickHandler = null;
+    }
+  }
+}
+
+function showCanvasRightclickMenu(clientX, clientY) {
+  lastCanvasRightclickClientX = clientX;
+  lastCanvasRightclickClientY = clientY;
+  const menu = document.getElementById('canvas-rightclick-menu');
+  if (!menu) return;
+  menu.style.left = clientX + 'px';
+  menu.style.top = clientY + 'px';
+  menu.classList.add('show');
+  function onDocumentClick(ev) {
+    if (menu.contains(ev.target)) return;
+    closeCanvasRightclickMenu();
+    document.removeEventListener('click', onDocumentClick);
+  }
+  menu._outsideClickHandler = onDocumentClick;
+  setTimeout(() => document.addEventListener('click', onDocumentClick), 0);
+}
+
+function closeCanvasRightclickMenu() {
+  const menu = document.getElementById('canvas-rightclick-menu');
+  if (menu) {
+    menu.classList.remove('show');
+    if (menu._outsideClickHandler) {
+      document.removeEventListener('click', menu._outsideClickHandler);
+      menu._outsideClickHandler = null;
+    }
+  }
+}
+
+function setupCanvasContextMenu() {
+  const menu = document.getElementById('canvas-context-menu');
+  const header = document.getElementById('canvas-context-menu-header');
+  const resizeHandle = document.getElementById('canvas-context-menu-resize');
+  const closeBtn = document.getElementById('canvas-context-menu-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      closeCanvasContextMenu();
+    });
+  }
+  if (header) {
+    header.addEventListener('mousedown', e => {
+      if (e.button !== 0 || e.target.closest('input') || e.target.closest('#canvas-context-menu-close')) return;
+      e.preventDefault();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startLeft = parseFloat(menu.style.left) || 0;
+      const startTop = parseFloat(menu.style.top) || 0;
+      function onMove(ev) {
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        menu.style.left = (startLeft + dx) + 'px';
+        menu.style.top = (startTop + dy) + 'px';
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+  if (resizeHandle) {
+    resizeHandle.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startW = parseFloat(menu.style.width) || menu.offsetWidth;
+      const startH = parseFloat(menu.style.height) || menu.offsetHeight;
+      const minW = 400;
+      const minH = 280;
+      const maxW = Math.min(window.innerWidth * 0.95, 9999);
+      const maxH = Math.min(window.innerHeight * 0.9, 9999);
+      function onMove(ev) {
+        let w = startW + (ev.clientX - startX);
+        let h = startH + (ev.clientY - startY);
+        w = Math.max(minW, Math.min(maxW, w));
+        h = Math.max(minH, Math.min(maxH, h));
+        menu.style.width = w + 'px';
+        menu.style.height = h + 'px';
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+  const rightclickMenu = document.getElementById('canvas-rightclick-menu');
+  if (rightclickMenu) {
+    rightclickMenu.querySelector('[data-action="node-window"]')?.addEventListener('click', e => {
+      e.stopPropagation();
+      closeCanvasRightclickMenu();
+      openNodeWindow(lastCanvasRightclickClientX, lastCanvasRightclickClientY);
+    });
+  }
+  document.addEventListener('contextmenu', e => {
+    if (!wrapper.contains(e.target)) return;
+    if (e.target.closest('.node') || e.target.closest('#zoom-controls')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeContextMenu();
+    closeCanvasContextMenu();
+    showCanvasRightclickMenu(e.clientX, e.clientY);
+  }, true);
+}
+
+function buildNodeElement(type, x, y, icon, tierId) {
   const node = document.createElement('div');
   node.className = 'node';
   node.style.left = x + 'px';
   node.style.top  = y + 'px';
   node.dataset.id = String(nodeCounter++);
   node.dataset.type = type;
+  node.dataset.tier = tierId;
   node.dataset.rate = '0';
   node.dataset.item = getDefaultItem(type);
-  if (type === 'miner') node.dataset.miningRate = '60';
+  if (type === 'miner') {
+    node.dataset.miningRate = getMinerDefaultRate(tierId);
+    node.dataset.oreQuality = getMinerDefaultOreQualityId();
+  }
 
-  const typeLabel = (type === 'foundry' ? 'Foundry' : type === 'refinery' ? 'Refinery' : type.charAt(0).toUpperCase() + type.slice(1));
+  const def = getMachineDef(type);
+  const tierName = (def && def.tiers) ? (def.tiers.find(t => t.id === tierId) || def.tiers[0])?.name || '' : '';
+  const typeLabel = def ? `${def.name} ${tierName}`.trim() : (type.charAt(0).toUpperCase() + type.slice(1));
   node.innerHTML = `
     <div class="node-header">${icon} ${typeLabel}</div>
     <div class="node-rate-wrap"><input type="text" inputmode="decimal" class="node-rate" value="0" /><span class="node-rate-unit">/ min</span></div>
@@ -338,31 +652,29 @@ function createNode(type, x, y, icon = '') {
 
   const portsContainer = document.createElement('div');
   portsContainer.style.cssText = 'position:absolute;inset:0;pointer-events:auto';
-
-  const outPort = createPort('output', 'output');
-  portsContainer.appendChild(outPort);
-
-  if (type === 'miner') {
-    // only output
-  } else if (type === 'smelter') {
-    portsContainer.appendChild(createPort('input', 'input-1'));
-  } else if (type === 'constructor') {
-    portsContainer.appendChild(createPort('input', 'input-1'));
-    portsContainer.appendChild(createPort('input', 'input-2'));
-  } else if (type === 'assembler') {
-    for (let i = 1; i <= 4; i++) portsContainer.appendChild(createPort('input', 'input-' + i));
-  } else if (type === 'foundry') {
-    portsContainer.appendChild(createPort('input', 'input-1'));
-    portsContainer.appendChild(createPort('input', 'input-2'));
-  } else if (type === 'refinery') {
-    portsContainer.appendChild(createPort('input', 'input-1'));
-    portsContainer.appendChild(createPort('input', 'input-2'));
-    portsContainer.appendChild(createPort('input', 'input-3'));
-  } else {
-    portsContainer.appendChild(createPort('input', 'input-1'));
-  }
-
+  portsContainer.appendChild(createPort('output', 'output'));
+  const inputCount = getInputCount(type);
+  for (let i = 1; i <= inputCount; i++) portsContainer.appendChild(createPort('input', 'input-' + i));
   node.appendChild(portsContainer);
+  return node;
+}
+
+function createNodeInStorage(type, icon = '', tierId = 'mk1') {
+  const node = buildNodeElement(type, 0, 0, icon, tierId);
+  node.classList.add('node-in-storage');
+  node.draggable = true;
+  node.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('from-storage', '1');
+    e.dataTransfer.setData('node-id', node.dataset.id);
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  const storageList = document.getElementById('node-storage-list');
+  if (storageList) storageList.appendChild(node);
+  return node;
+}
+
+function createNode(type, x, y, icon = '', tierId = 'mk1') {
+  const node = buildNodeElement(type, x, y, icon, tierId);
   canvas.appendChild(node);
   nodes.push(node);
   nodeById.set(node.dataset.id, node);
@@ -393,64 +705,61 @@ function createPort(type, className = '') {
   return port;
 }
 
-// Mining rate options (per min) for Miner buildings
-// Production options per building type (item label + recipe data for calculation)
-const productionOptions = {
-  miner: [
-    { item: 'Iron Ore', out: 60 },
-    { item: 'Copper Ore', out: 60 },
-    { item: 'Limestone', out: 60 },
-    { item: 'Coal', out: 60 },
-    { item: 'Caterium Ore', out: 60 }
-  ],
-  smelter: [
-    { item: 'Iron Ingot', in: 30, out: 30 },
-    { item: 'Copper Ingot', in: 30, out: 30 },
-    { item: 'Caterium Ingot', in: 45, out: 15 }
-  ],
-  constructor: [
-    { item: 'Iron Plate', in: 30, out: 20 },
-    { item: 'Iron Rod', in: 15, out: 15 },
-    { item: 'Screw', in: 10, out: 40 },
-    { item: 'Concrete', in: 45, out: 15 },
-    { item: 'Copper Sheet', in: 20, out: 10 }
-  ],
-  assembler: [
-    { item: 'Reinforced Iron Plate', in: 30, in2: 60, out: 5 },
-    { item: 'Modular Frame', in: 24, in2: 12, out: 4 },
-    { item: 'Rotor', in: 20, in2: 10, out: 4 },
-    { item: 'Smart Plating', in: 30, in2: 30, out: 2 },
-    { item: 'Cable', in: 30, in2: 60, out: 30 }
-  ],
-  foundry: [
-    { item: 'Steel Ingot', in: 45, in2: 45, out: 45 },
-    { item: 'Solid Steel Ingot', in: 20, in2: 20, out: 60 }
-  ],
-  refinery: [
-    { item: 'Plastic', in: 30, in2: 20, out: 20 },
-    { item: 'Rubber', in: 30, in2: 20, out: 20 },
-    { item: 'Fuel', in: 60, in2: 40, out: 40 }
-  ]
-};
+function getMinerDefaultRate(tierId) {
+  const def = getMachineDef('miner');
+  if (!def || !def.tiers) return '60';
+  const tier = def.tiers.find(t => t.id === tierId) || def.tiers[0];
+  return tier && tier.maxOutputPerMin != null ? String(tier.maxOutputPerMin) : '60';
+}
+
+function getMinerOreQualities() {
+  const def = getMachineDef('miner');
+  const list = def && def.oreQualities && Array.isArray(def.oreQualities) ? def.oreQualities : [];
+  if (list.length) return list;
+  return [{ id: 'normal', name: 'Normal', multiplier: 1 }];
+}
+
+function getMinerOreQualityMultiplier(qualityId) {
+  const qualities = getMinerOreQualities();
+  const q = qualities.find(x => x.id === qualityId) || qualities[0];
+  return q && typeof q.multiplier === 'number' ? q.multiplier : 1;
+}
+
+function getMinerDefaultOreQualityId() {
+  const qualities = getMinerOreQualities();
+  return (qualities[0] && qualities[0].id) || 'normal';
+}
 
 function getRecipeForNode(node) {
   const type = node.dataset.type;
   const item = node.dataset.item;
-  const opts = productionOptions[type];
-  if (!opts) return null;
-  const r = opts.find(o => o.item === item);
-  const base = r || opts[0] || null;
-  if (!base) return null;
-  if (type === 'miner' && node.dataset.miningRate) {
-    const rate = parseInt(node.dataset.miningRate, 10);
-    if (!isNaN(rate)) return { ...base, out: rate };
+  const tierId = node.dataset.tier || 'mk1';
+  const opts = recipeListByMachine[type];
+  if (!opts || !opts.length) return null;
+  const r = opts.find(o => o.item === item || o.name === item) || opts[0];
+  if (!r) return null;
+  const def = getMachineDef(type);
+  const tier = (def && def.tiers) ? def.tiers.find(t => t.id === tierId) : null;
+  const speed = (tier && (tier.craftingSpeed != null)) ? tier.craftingSpeed : (tier && tier.miningSpeed != null) ? tier.miningSpeed : 1;
+  if (type === 'miner') {
+    const rate = parseFloat(node.dataset.miningRate, 10);
+    const baseOut = !isNaN(rate) ? rate : (tier && tier.maxOutputPerMin != null ? tier.maxOutputPerMin : 60);
+    const mult = getMinerOreQualityMultiplier(node.dataset.oreQuality);
+    return { ...r, out: baseOut * mult };
   }
-  return base;
+  return {
+    ...r,
+    in: r.in != null ? r.in * speed : undefined,
+    in2: r.in2 != null ? r.in2 * speed : undefined,
+    in3: r.in3 != null ? r.in3 * speed : undefined,
+    in4: r.in4 != null ? r.in4 * speed : undefined,
+    out: r.out != null ? r.out * speed : undefined
+  };
 }
 
 function getDefaultItem(type) {
-  const opts = productionOptions[type];
-  return (opts && opts[0] && opts[0].item) ? opts[0].item : 'Item';
+  const opts = recipeListByMachine[type];
+  return (opts && opts[0] && (opts[0].item || opts[0].name)) ? (opts[0].item || opts[0].name) : 'Item';
 }
 
 // ─── IMPROVED DRAGGABLE ──────────────────────────
@@ -551,15 +860,6 @@ let connectionPreviewLine = null;
 let connectionDragSource = null;
 let connectionDropHighlight = null;
 
-const BUILDING_TYPES = [
-  { type: 'miner', label: 'Miner Mk.1', icon: '⛏️' },
-  { type: 'smelter', label: 'Smelter', icon: '♨️' },
-  { type: 'constructor', label: 'Constructor', icon: '🔩' },
-  { type: 'assembler', label: 'Assembler', icon: '⚙️' },
-  { type: 'foundry', label: 'Foundry', icon: '🏭' },
-  { type: 'refinery', label: 'Refinery', icon: '🛢️' }
-];
-
 let addNodeDialogSourcePort = null;
 let addNodeDialogDropX = 0;
 let addNodeDialogDropY = 0;
@@ -569,18 +869,24 @@ function openAddNodeDialog(sourcePort, dropX, dropY) {
   addNodeDialogDropX = dropX;
   addNodeDialogDropY = dropY;
   const listEl = document.getElementById('add-node-dialog-list');
+  const titleEl = document.getElementById('add-node-dialog-title');
+  const hintEl = document.getElementById('add-node-dialog-hint');
   listEl.innerHTML = '';
-  BUILDING_TYPES.filter(b => b.type !== 'miner')
-    .forEach(({ type, label, icon }) => {
+  const isConnectMode = !!sourcePort;
+  if (titleEl) titleEl.textContent = isConnectMode ? 'Add building and connect' : 'Add building';
+  if (hintEl) hintEl.textContent = isConnectMode ? 'Choose a building to place at the drop location and connect from the previous node.' : 'Choose a building to place here.';
+  const list = isConnectMode ? machinesList.filter(b => b.type !== 'miner') : machinesList;
+  list.forEach(({ type, tierId, label, icon }) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'add-node-option';
     btn.dataset.type = type;
+    btn.dataset.tier = tierId;
     btn.dataset.icon = icon;
     btn.innerHTML = `<span class="add-node-icon">${icon}</span><span>${label}</span>`;
     btn.addEventListener('click', () => {
       saveState();
-      const node = createNode(type, addNodeDialogDropX - 80, addNodeDialogDropY - 45, icon);
+      const node = createNode(type, addNodeDialogDropX - 80, addNodeDialogDropY - 45, icon, tierId);
       const toPort = node.querySelector('.port.input');
       if (toPort && addNodeDialogSourcePort) {
         const srcNode = addNodeDialogSourcePort.closest('.node');
@@ -706,7 +1012,7 @@ function drawConnection(fromPort, toPort) {
 
 function getPortCenter(port, canvasRect) {
   const rect = port.getBoundingClientRect();
-  const cr = canvasRect || canvas.getBoundingClientRect();
+  const cr = canvasRect || wrapper.getBoundingClientRect();
   return {
     x: (rect.left + rect.width / 2 - cr.left - translateX) / scale,
     y: (rect.top  + rect.height / 2 - cr.top  - translateY) / scale
@@ -736,7 +1042,7 @@ function updateAllLines() {
   const onlyNodeId = pendingUpdateNodeId;
   pendingUpdateNodeId = null;
 
-  const canvasRect = canvas.getBoundingClientRect();
+  const canvasRect = wrapper.getBoundingClientRect();
   const lines = svg.querySelectorAll('.connection');
   const toUpdate = [];
 
@@ -843,12 +1149,14 @@ document.getElementById('export-btn').onclick = () => {
     nodes: nodes.map(n => ({
       id: n.dataset.id,
       type: n.dataset.type,
+      tier: n.dataset.tier,
       x: parseFloat(n.style.left),
       y: parseFloat(n.style.top),
       rate: n.dataset.rate,
       item: n.dataset.item,
       name: n.querySelector('.node-header')?.textContent?.trim(),
-      ...(n.dataset.miningRate && { miningRate: n.dataset.miningRate })
+      ...(n.dataset.miningRate && { miningRate: n.dataset.miningRate }),
+      ...(n.dataset.oreQuality && { oreQuality: n.dataset.oreQuality })
     })),
     connections: connections.map(c => ({ ...c })),
     nodeCounter
@@ -919,6 +1227,8 @@ const editOverlay = document.getElementById('edit-dialog-overlay');
 const editNameInput = document.getElementById('edit-dialog-name');
 const editProductionSelect = document.getElementById('edit-dialog-production');
 const editRateInput = document.getElementById('edit-dialog-rate');
+const editOreQualityWrap = document.getElementById('edit-dialog-ore-quality-wrap');
+const editOreQualitySelect = document.getElementById('edit-dialog-ore-quality');
 let editDialogNode = null;
 
 function openEditDialog(node) {
@@ -927,21 +1237,38 @@ function openEditDialog(node) {
   editRateInput.value = node.dataset.rate ?? node.querySelector('.node-rate')?.value ?? '0';
 
   const type = node.dataset.type;
-  const opts = productionOptions[type] || [];
+  const opts = recipeListByMachine[type] || [];
   editProductionSelect.innerHTML = '';
   opts.forEach(r => {
     const opt = document.createElement('option');
-    opt.value = r.item;
-    opt.textContent = r.item;
+    const val = r.item || r.name;
+    opt.value = val;
+    opt.textContent = val;
     editProductionSelect.appendChild(opt);
   });
-  editProductionSelect.value = node.dataset.item || (opts[0] && opts[0].item) || '';
+  editProductionSelect.value = node.dataset.item || (opts[0] && (opts[0].item || opts[0].name)) || '';
+
+  if (editOreQualityWrap && editOreQualitySelect) {
+    if (type === 'miner') {
+      editOreQualityWrap.style.display = '';
+      editOreQualitySelect.innerHTML = '';
+      getMinerOreQualities().forEach(q => {
+        const opt = document.createElement('option');
+        opt.value = q.id;
+        opt.textContent = q.name;
+        editOreQualitySelect.appendChild(opt);
+      });
+      editOreQualitySelect.value = node.dataset.oreQuality || getMinerDefaultOreQualityId();
+    } else {
+      editOreQualityWrap.style.display = 'none';
+    }
+  }
 
   editOverlay.classList.add('show');
   editNameInput.focus();
   editNameInput.select();
 
-  const focusables = editOverlay.querySelectorAll('button, input, select');
+  const focusables = [...editOverlay.querySelectorAll('button, input, select')].filter(el => el.offsetParent != null);
   editOverlay._focusTrap = e => {
     if (e.key !== 'Tab') return;
     const first = focusables[0];
@@ -975,6 +1302,10 @@ function saveEditDialog() {
     if (node.dataset.type === 'miner') node.dataset.miningRate = String(rateNum);
     const rateEl = node.querySelector('.node-rate');
     if (rateEl) rateEl.value = String(rateNum);
+  }
+  if (node.dataset.type === 'miner' && editOreQualitySelect) {
+    const qualityId = editOreQualitySelect.value;
+    if (qualityId) node.dataset.oreQuality = qualityId;
   }
   closeEditDialog();
 }
@@ -1100,3 +1431,28 @@ ctxMenu.querySelectorAll('.ctx-item[data-action]').forEach(btn => {
     closeContextMenu();
   });
 });
+
+// ─── Load config and init ────────────────────────
+// Inline default config so the app works when opened as file:// (fetch is blocked)
+const DEFAULT_CONFIG = {"machines":{"miner":{"name":"Miner","inputCount":0,"outputCount":1,"oreQualities":[{"id":"impure","name":"Impure","multiplier":0.5},{"id":"normal","name":"Normal","multiplier":1},{"id":"pure","name":"Pure","multiplier":2}],"tiers":[{"id":"mk1","name":"Mk.1","miningSpeed":0.5,"maxOutputPerMin":60},{"id":"mk2","name":"Mk.2","miningSpeed":1,"maxOutputPerMin":120},{"id":"mk3","name":"Mk.3","miningSpeed":2,"maxOutputPerMin":240}]},"smelter":{"name":"Smelter","inputCount":1,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"constructor":{"name":"Constructor","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"assembler":{"name":"Assembler","inputCount":4,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"foundry":{"name":"Foundry","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"refinery":{"name":"Refinery","inputCount":3,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]}},"items":[{"id":"iron_ore","name":"Iron Ore"},{"id":"copper_ore","name":"Copper Ore"},{"id":"limestone","name":"Limestone"},{"id":"coal","name":"Coal"},{"id":"caterium_ore","name":"Caterium Ore"},{"id":"iron_ingot","name":"Iron Ingot"},{"id":"copper_ingot","name":"Copper Ingot"},{"id":"caterium_ingot","name":"Caterium Ingot"},{"id":"iron_plate","name":"Iron Plate"},{"id":"iron_rod","name":"Iron Rod"},{"id":"screw","name":"Screw"},{"id":"concrete","name":"Concrete"},{"id":"copper_sheet","name":"Copper Sheet"},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate"},{"id":"modular_frame","name":"Modular Frame"},{"id":"rotor","name":"Rotor"},{"id":"smart_plating","name":"Smart Plating"},{"id":"cable","name":"Cable"},{"id":"steel_ingot","name":"Steel Ingot"},{"id":"solid_steel_ingot","name":"Solid Steel Ingot"},{"id":"plastic","name":"Plastic"},{"id":"rubber","name":"Rubber"},{"id":"fuel","name":"Fuel"},{"id":"wire","name":"Wire"},{"id":"crude_oil","name":"Crude Oil"},{"id":"water","name":"Water"}],"recipes":[{"id":"iron_ingot","name":"Iron Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Iron Ore","amount":30}],"outputs":[{"item":"Iron Ingot","amount":30}]},{"id":"copper_ingot","name":"Copper Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ore","amount":30}],"outputs":[{"item":"Copper Ingot","amount":30}]},{"id":"caterium_ingot","name":"Caterium Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Caterium Ore","amount":45}],"outputs":[{"item":"Caterium Ingot","amount":15}]},{"id":"iron_plate","name":"Iron Plate","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Ingot","amount":30}],"outputs":[{"item":"Iron Plate","amount":20}]},{"id":"iron_rod","name":"Iron Rod","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Iron Ingot","amount":15}],"outputs":[{"item":"Iron Rod","amount":15}]},{"id":"screw","name":"Screw","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Rod","amount":10}],"outputs":[{"item":"Screw","amount":40}]},{"id":"concrete","name":"Concrete","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Limestone","amount":45}],"outputs":[{"item":"Concrete","amount":15}]},{"id":"copper_sheet","name":"Copper Sheet","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Copper Ingot","amount":20}],"outputs":[{"item":"Copper Sheet","amount":10}]},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate","machine":"assembler","craftingTimeSeconds":12,"inputs":[{"item":"Iron Plate","amount":30},{"item":"Screw","amount":60}],"outputs":[{"item":"Reinforced Iron Plate","amount":5}]},{"id":"modular_frame","name":"Modular Frame","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Reinforced Iron Plate","amount":24},{"item":"Iron Rod","amount":12}],"outputs":[{"item":"Modular Frame","amount":4}]},{"id":"rotor","name":"Rotor","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Iron Rod","amount":20},{"item":"Screw","amount":10}],"outputs":[{"item":"Rotor","amount":4}]},{"id":"smart_plating","name":"Smart Plating","machine":"assembler","craftingTimeSeconds":30,"inputs":[{"item":"Reinforced Iron Plate","amount":30},{"item":"Rotor","amount":30}],"outputs":[{"item":"Smart Plating","amount":2}]},{"id":"cable","name":"Cable","machine":"assembler","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ingot","amount":30},{"item":"Wire","amount":60}],"outputs":[{"item":"Cable","amount":30}]},{"id":"steel_ingot","name":"Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ore","amount":45},{"item":"Coal","amount":45}],"outputs":[{"item":"Steel Ingot","amount":45}]},{"id":"solid_steel_ingot","name":"Solid Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ingot","amount":20},{"item":"Coal","amount":20}],"outputs":[{"item":"Solid Steel Ingot","amount":60}]},{"id":"plastic","name":"Plastic","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Plastic","amount":20}]},{"id":"rubber","name":"Rubber","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Rubber","amount":20}]},{"id":"fuel","name":"Fuel","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":60},{"item":"Water","amount":40}],"outputs":[{"item":"Fuel","amount":40}]}]};
+
+function init() {
+  setupCanvasContextMenu();
+}
+
+function loadConfigAndInit() {
+  APP_CONFIG = DEFAULT_CONFIG;
+  buildConfigLookups();
+  init();
+}
+
+fetch('config.json')
+  .then(r => { if (!r.ok) throw new Error(r.statusText); return r.json(); })
+  .then(config => {
+    APP_CONFIG = config;
+    buildConfigLookups();
+    init();
+  })
+  .catch(() => {
+    loadConfigAndInit();
+  });

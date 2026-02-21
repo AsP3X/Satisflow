@@ -4,6 +4,11 @@
       "name": "Miner",
       "inputCount": 0,
       "outputCount": 1,
+      "oreQualities": [
+        { "id": "impure", "name": "Impure", "multiplier": 0.5 },
+        { "id": "normal", "name": "Normal", "multiplier": 1 },
+        { "id": "pure", "name": "Pure", "multiplier": 2 }
+      ],
       "tiers": [
         { "id": "mk1", "name": "Mk.1", "miningSpeed": 0.5, "maxOutputPerMin": 60 },
         { "id": "mk2", "name": "Mk.2", "miningSpeed": 1, "maxOutputPerMin": 120 },

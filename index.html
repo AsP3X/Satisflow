@@ -21,16 +21,10 @@
 <input type="file" id="import-file-input" accept=".json,application/json" style="display: none" />
 
 <div id="main">
-  <aside id="sidebar">
-    <h3 class="sidebar-title">Buildings</h3>
-    <div class="palette-item" draggable="true" data-type="miner"     data-icon="⛏️"><i class="fas fa-gem"></i><div>Miner Mk.1</div></div>
-    <div class="palette-item" draggable="true" data-type="smelter"   data-icon="♨️"><i class="fas fa-fire"></i><div>Smelter</div></div>
-    <div class="palette-item" draggable="true" data-type="constructor" data-icon="🔩"><i class="fas fa-industry"></i><div>Constructor</div></div>
-    <div class="palette-item" draggable="true" data-type="assembler"  data-icon="⚙️"><i class="fas fa-cogs"></i><div>Assembler</div></div>
-    <div class="palette-item" draggable="true" data-type="foundry"   data-icon="🏭"><i class="fas fa-industry"></i><div>Foundry</div></div>
-    <div class="palette-item" draggable="true" data-type="refinery"   data-icon="🛢️"><i class="fas fa-oil-can"></i><div>Refinery</div></div>
+  <aside id="node-storage-sidebar">
+    <h3 class="node-storage-title">Nodes</h3>
+    <div id="node-storage-list"></div>
   </aside>
-
   <div id="canvas-wrapper">
     <div id="canvas">
       <svg id="svg-container"></svg>
@@ -46,10 +40,27 @@
   </div>
 </div>
 
-<div id="node-context-menu">
+<div id="node-context-menu" class="ctx-menu">
   <button type="button" class="ctx-item" data-action="edit"><i class="fas fa-pen"></i> Edit</button>
   <button type="button" class="ctx-item" data-action="clear"><i class="fas fa-unlink"></i> Clear Connections</button>
   <button type="button" class="ctx-item delete" data-action="delete"><i class="fas fa-trash"></i> Delete</button>
+</div>
+
+<div id="canvas-rightclick-menu" class="ctx-menu" aria-label="Canvas menu">
+  <button type="button" class="ctx-item" data-action="node-window"><i class="fas fa-plus-square"></i> Node Window</button>
+</div>
+
+<div id="canvas-context-menu" class="ctx-menu" aria-label="Add building">
+  <div id="canvas-context-menu-header" class="ctx-menu-header">
+    <span class="ctx-menu-title">Add building</span>
+    <input type="text" id="canvas-context-menu-search" class="ctx-menu-search" placeholder="Search..." autocomplete="off" />
+    <button type="button" id="canvas-context-menu-close" class="ctx-menu-close" title="Close" aria-label="Close"><i class="fas fa-times"></i></button>
+  </div>
+  <div class="ctx-menu-body">
+    <div id="canvas-context-menu-categories" class="ctx-menu-categories"></div>
+    <div id="canvas-context-menu-items" class="ctx-menu-items"></div>
+  </div>
+  <div id="canvas-context-menu-resize" class="ctx-menu-resize" aria-label="Resize"></div>
 </div>
 
 <div id="edit-dialog-overlay">
@@ -61,6 +72,10 @@
     <select id="edit-dialog-production"></select>
     <label for="edit-dialog-rate">Rate (/ min)</label>
     <input type="text" id="edit-dialog-rate" inputmode="decimal" placeholder="0" />
+    <div id="edit-dialog-ore-quality-wrap" class="edit-dialog-miner-only" style="display: none;">
+      <label for="edit-dialog-ore-quality">Ore node quality</label>
+      <select id="edit-dialog-ore-quality"></select>
+    </div>
     <div id="edit-dialog-actions">
       <button type="button" id="edit-dialog-cancel">Cancel</button>
       <button type="button" id="edit-dialog-save">Save</button>
@@ -70,8 +85,8 @@
 
 <div id="add-node-dialog-overlay">
   <div id="add-node-dialog">
-    <h3>Add building and connect</h3>
-    <p class="add-node-dialog-hint">Choose a building to place at the drop location and connect from the previous node.</p>
+    <h3 id="add-node-dialog-title">Add building</h3>
+    <p id="add-node-dialog-hint" class="add-node-dialog-hint">Choose a building to place here.</p>
     <div id="add-node-dialog-list"></div>
     <div id="add-node-dialog-actions">
       <button type="button" id="add-node-dialog-cancel">Cancel</button>
