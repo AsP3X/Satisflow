@@ -23,7 +23,7 @@ let machinesList = [];
 let recipesByMachine = {};
 let recipeListByMachine = {};
 
-const MACHINE_ICONS = { miner: '⛏️', smelter: '♨️', constructor: '🔩', assembler: '⚙️', foundry: '🏭', refinery: '🛢️' };
+const MACHINE_ICONS = { miner: '⛏️', smelter: '♨️', constructor: '🔩', assembler: '⚙️', foundry: '🏭', refinery: '🛢️', storage_container: '📦' };
 
 function buildConfigLookups() {
   if (!APP_CONFIG || !APP_CONFIG.machines || !APP_CONFIG.recipes) return;
@@ -127,7 +127,7 @@ function getMachineDef(type) {
 
 function getInputCount(type) {
   const def = getMachineDef(type);
-  return def && def.inputCount != null ? def.inputCount : (type === 'miner' ? 0 : type === 'smelter' ? 1 : type === 'constructor' ? 2 : type === 'assembler' ? 4 : type === 'foundry' ? 2 : 3);
+  return def && def.inputCount != null ? def.inputCount : (type === 'miner' ? 0 : type === 'smelter' ? 1 : type === 'constructor' ? 2 : type === 'assembler' ? 4 : type === 'foundry' ? 2 : type === 'storage_container' ? 1 : 3);
 }
 
 function createNodeFromData(nd) {
@@ -155,22 +155,11 @@ function createNodeFromData(nd) {
   const def = getMachineDef(type);
   const tierName = (def && def.tiers) ? (def.tiers.find(t => t.id === tier) || def.tiers[0])?.name || tier : '';
   const label = nd.name || `${icon} ${def?.name || type} ${tierName}`.trim();
-  const rateDisplay = hasCalculatedRate(type) ? node.dataset.rate : (nd.rate != null ? nd.rate : '0');
+  const productName = node.dataset.item || '';
   node.innerHTML = `
     <div class="node-header">${label}</div>
-    <div class="node-rate-wrap"><input type="text" inputmode="decimal" class="node-rate" value="${rateDisplay}" ${hasCalculatedRate(type) ? 'readonly' : ''} /><span class="node-rate-unit">/ min</span></div>
+    <div class="node-product">${productName}</div>
   `;
-  const rateInput = node.querySelector('.node-rate');
-  if (!hasCalculatedRate(type)) {
-    rateInput.addEventListener('input', e => {
-      node.dataset.rate = e.target.value.replace(',', '.');
-    });
-    rateInput.addEventListener('change', e => {
-      const v = parseFloat(String(e.target.value).replace(',', '.'));
-      if (!isNaN(v) && v >= 0) node.dataset.rate = String(v);
-      e.target.value = node.dataset.rate;
-    });
-  }
   const portsContainer = document.createElement('div');
   portsContainer.style.cssText = 'position:absolute;inset:0;pointer-events:auto';
   portsContainer.appendChild(createPort('output', 'output'));
@@ -183,14 +172,12 @@ function createNodeFromData(nd) {
   node.addEventListener('contextmenu', e => showNodeContextMenu(e, node));
   node.addEventListener('mousedown', e => { if (e.button === 0 && !e.target.closest('.port')) selectNode(node, e.shiftKey); });
   node.querySelectorAll('.port').forEach(port => {
-    if (port.dataset.portType === 'output') {
-      port.addEventListener('mousedown', e => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        e.stopPropagation();
-        startConnectionDrag(port, e);
-      });
-    }
+    port.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      startConnectionDrag(port, e);
+    });
   });
   return node;
 }
@@ -392,14 +379,12 @@ wrapper.addEventListener('drop', e => {
       node.addEventListener('contextmenu', ev => showNodeContextMenu(ev, node));
       node.addEventListener('mousedown', ev => { if (ev.button === 0 && !ev.target.closest('.port')) selectNode(node, ev.shiftKey); });
       node.querySelectorAll('.port').forEach(port => {
-        if (port.dataset.portType === 'output') {
-          port.addEventListener('mousedown', ev => {
-            if (ev.button !== 0) return;
-            ev.preventDefault();
-            ev.stopPropagation();
-            startConnectionDrag(port, ev);
-          });
-        }
+        port.addEventListener('mousedown', ev => {
+          if (ev.button !== 0) return;
+          ev.preventDefault();
+          ev.stopPropagation();
+          startConnectionDrag(port, ev);
+        });
       });
       saveState();
     }
@@ -644,31 +629,19 @@ function buildNodeElement(type, x, y, icon, tierId) {
   }
   const def = getMachineDef(type);
   const tierName = (def && def.tiers) ? (def.tiers.find(t => t.id === tierId) || def.tiers[0])?.name || '' : '';
-  const typeLabel = def ? `${def.name} ${tierName}`.trim() : (type.charAt(0).toUpperCase() + type.slice(1));
-  let initialRate = 0;
+  const slotsSuffix = (def && def.slots) ? ` · ${def.slots} slots` : '';
+  const typeLabel = def ? `${def.name}${slotsSuffix} ${tierName}`.trim() : (type.charAt(0).toUpperCase() + type.slice(1));
   if (type === 'miner') {
-    initialRate = getMinerCalculatedRate(tierId, node.dataset.oreQuality);
+    node.dataset.rate = String(getMinerCalculatedRate(tierId, node.dataset.oreQuality));
+    node.dataset.miningRate = node.dataset.rate;
   } else if (type === 'smelter') {
-    initialRate = getCraftingMachineCalculatedRate(type, tierId, node.dataset.item);
+    node.dataset.rate = String(getCraftingMachineCalculatedRate(type, tierId, node.dataset.item));
   }
-  const rateReadonly = hasCalculatedRate(type);
+  const productName = node.dataset.item || '';
   node.innerHTML = `
     <div class="node-header">${icon} ${typeLabel}</div>
-    <div class="node-rate-wrap"><input type="text" inputmode="decimal" class="node-rate" value="${initialRate}" ${rateReadonly ? 'readonly' : ''} /><span class="node-rate-unit">/ min</span></div>
+    <div class="node-product">${productName}</div>
   `;
-  if (rateReadonly) {
-    node.dataset.rate = String(initialRate);
-    if (type === 'miner') node.dataset.miningRate = String(initialRate);
-  } else {
-    node.querySelector('.node-rate').addEventListener('input', e => {
-      node.dataset.rate = e.target.value.replace(',', '.');
-    });
-    node.querySelector('.node-rate').addEventListener('change', e => {
-      const v = parseFloat(String(e.target.value).replace(',', '.'));
-      if (!isNaN(v) && v >= 0) node.dataset.rate = String(v);
-      e.target.value = node.dataset.rate;
-    });
-  }
 
   const portsContainer = document.createElement('div');
   portsContainer.style.cssText = 'position:absolute;inset:0;pointer-events:auto';
@@ -705,14 +678,12 @@ function createNode(type, x, y, icon = '', tierId = 'mk1') {
   node.addEventListener('mousedown', e => { if (e.button === 0 && !e.target.closest('.port')) selectNode(node, e.shiftKey); });
 
   node.querySelectorAll('.port').forEach(port => {
-    if (port.dataset.portType === 'output') {
-      port.addEventListener('mousedown', e => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        e.stopPropagation();
-        startConnectionDrag(port, e);
-      });
-    }
+    port.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      startConnectionDrag(port, e);
+    });
   });
 
   return node;
@@ -928,17 +899,32 @@ function openAddNodeDialog(sourcePort, dropX, dropY) {
     btn.addEventListener('click', () => {
       saveState();
       const node = createNode(type, addNodeDialogDropX - 80, addNodeDialogDropY - 45, icon, tierId);
-      const toPort = node.querySelector('.port.input');
-      if (toPort && addNodeDialogSourcePort) {
+      if (addNodeDialogSourcePort) {
         const srcNode = addNodeDialogSourcePort.closest('.node');
         if (srcNode) {
-          connections.push({
-            fromNode: srcNode.dataset.id,
-            fromPort: addNodeDialogSourcePort.className,
-            toNode: node.dataset.id,
-            toPort: toPort.className
-          });
-          drawConnection(addNodeDialogSourcePort, toPort);
+          if (addNodeDialogSourcePort.dataset.portType === 'output') {
+            const toPort = node.querySelector('.port.input');
+            if (toPort) {
+              connections.push({
+                fromNode: srcNode.dataset.id,
+                fromPort: addNodeDialogSourcePort.className,
+                toNode: node.dataset.id,
+                toPort: toPort.className
+              });
+              drawConnection(addNodeDialogSourcePort, toPort);
+            }
+          } else {
+            const fromPort = node.querySelector('.port.output');
+            if (fromPort) {
+              connections.push({
+                fromNode: node.dataset.id,
+                fromPort: fromPort.className,
+                toNode: srcNode.dataset.id,
+                toPort: addNodeDialogSourcePort.className
+              });
+              drawConnection(fromPort, addNodeDialogSourcePort);
+            }
+          }
         }
       }
       closeAddNodeDialog();
@@ -986,7 +972,10 @@ function startConnectionDrag(sourcePort, e) {
       connectionDropHighlight.classList.remove('port-drop-target');
       connectionDropHighlight = null;
     }
-    if (port && port.dataset.portType === 'input' && port.closest('.node') !== sourcePort.closest('.node')) {
+    const sourceIsOutput = sourcePort.dataset.portType === 'output';
+    const validDrop = port && port.closest('.node') !== sourcePort.closest('.node') &&
+      (sourceIsOutput ? port.dataset.portType === 'input' : port.dataset.portType === 'output');
+    if (validDrop) {
       port.classList.add('port-drop-target');
       connectionDropHighlight = port;
     }
@@ -1009,21 +998,34 @@ function startConnectionDrag(sourcePort, e) {
       connectionDropHighlight = null;
     }
 
-    if (targetPort && targetPort.dataset.portType === 'input') {
+    const sourceIsOutput = sourcePort.dataset.portType === 'output';
+    const targetIsInput = targetPort && targetPort.dataset.portType === 'input';
+    const targetIsOutput = targetPort && targetPort.dataset.portType === 'output';
+    const canConnect = (sourceIsOutput && targetIsInput) || (sourceIsOutput === false && targetIsOutput);
+
+    if (targetPort && canConnect) {
       const targetNode = targetPort.closest('.node');
       if (targetNode && targetNode !== sourceNode) {
         saveState();
-        connections.push({
-          fromNode: sourceNode.dataset.id,
-          fromPort: sourcePort.className,
-          toNode: targetNode.dataset.id,
-          toPort: targetPort.className
-        });
-        drawConnection(sourcePort, targetPort);
+        let fromNode, fromPort, toNode, toPort;
+        if (sourceIsOutput) {
+          fromNode = sourceNode.dataset.id;
+          fromPort = sourcePort.className;
+          toNode = targetNode.dataset.id;
+          toPort = targetPort.className;
+          drawConnection(sourcePort, targetPort);
+        } else {
+          fromNode = targetNode.dataset.id;
+          fromPort = targetPort.className;
+          toNode = sourceNode.dataset.id;
+          toPort = sourcePort.className;
+          drawConnection(targetPort, sourcePort);
+        }
+        connections.push({ fromNode, fromPort, toNode, toPort });
       } else if (targetNode === sourceNode) {
         toast('Cannot connect a node to itself');
       }
-    } else {
+    } else if (!targetPort || !canConnect) {
       const dropPoint = getCanvasPoint(e.clientX, e.clientY);
       openAddNodeDialog(sourcePort, dropPoint.x, dropPoint.y);
     }
@@ -1040,15 +1042,25 @@ function startConnectionDrag(sourcePort, e) {
 
 // ─── Draw connection line ────────────────────────
 function drawConnection(fromPort, toPort) {
+  const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.classList.add("connection-group");
   const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
   line.classList.add("connection");
-  svg.appendChild(line);
+  const labelBg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  labelBg.classList.add("connection-label-bg");
+  const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  label.classList.add("connection-label");
+  g.appendChild(line);
+  g.appendChild(labelBg);
+  g.appendChild(label);
+  svg.appendChild(g);
 
   updateLinePath(line, fromPort, toPort);
   line.dataset.fromNode = fromPort.closest('.node').dataset.id;
   line.dataset.toNode   = toPort.closest('.node').dataset.id;
   line.dataset.fromPortClass = fromPort.className;
   line.dataset.toPortClass   = toPort.className;
+  updateAllLines();
 }
 
 function getPortCenter(port, canvasRect) {
@@ -1109,15 +1121,40 @@ function updateAllLines() {
       const p2 = getPortCenter(toPort, canvasRect);
       const dx = p2.x - p1.x;
       const curvature = 0.35;
-      toUpdate.push({ line, p1, p2, dx, curvature });
+      toUpdate.push({ line, p1, p2, dx, curvature, fromNode });
     }
   }
 
   for (let i = 0; i < toUpdate.length; i++) {
-    const { line, p1, p2, dx, curvature } = toUpdate[i];
+    const { line, p1, p2, dx, curvature, fromNode } = toUpdate[i];
     const hx1 = p1.x + dx * curvature;
     const hx2 = p2.x - dx * curvature;
     line.setAttribute("d", `M${p1.x},${p1.y} C${hx1},${p1.y} ${hx2},${p2.y} ${p2.x},${p2.y}`);
+    const group = line.closest('.connection-group');
+    const labelEl = group ? group.querySelector('.connection-label') : null;
+    const labelBgEl = group ? group.querySelector('.connection-label-bg') : null;
+    if (labelEl && fromNode) {
+      const item = fromNode.dataset.item || 'Item';
+      const rate = fromNode.dataset.rate != null ? fromNode.dataset.rate : '0';
+      labelEl.textContent = `${item} ${rate}/min`;
+      const midX = (p1.x + 3 * hx1 + 3 * hx2 + p2.x) / 8;
+      const midY = (p1.y + p2.y) / 2;
+      labelEl.setAttribute('x', midX);
+      labelEl.setAttribute('y', midY);
+      if (labelBgEl) {
+        const pad = 4;
+        const rx = 4;
+        try {
+          const bbox = labelEl.getBBox();
+          labelBgEl.setAttribute('x', bbox.x - pad);
+          labelBgEl.setAttribute('y', bbox.y - pad);
+          labelBgEl.setAttribute('width', bbox.width + pad * 2);
+          labelBgEl.setAttribute('height', bbox.height + pad * 2);
+          labelBgEl.setAttribute('rx', rx);
+          labelBgEl.setAttribute('ry', rx);
+        } catch (_) {}
+      }
+    }
   }
 }
 
@@ -1363,6 +1400,8 @@ function saveEditDialog() {
   if (name) node.querySelector('.node-header').textContent = name;
   const item = editProductionSelect.value;
   if (item) node.dataset.item = item;
+  const productEl = node.querySelector('.node-product');
+  if (productEl) productEl.textContent = node.dataset.item || '';
   if (hasCalculatedRate(node.dataset.type)) {
     if (node.dataset.type === 'miner' && editOreQualitySelect) {
       const qualityId = editOreQualitySelect.value;
@@ -1410,7 +1449,10 @@ function removeConnection(fromNodeId, toNodeId, toPortClass) {
   if (idx !== -1) connections.splice(idx, 1);
   const line = [...svg.querySelectorAll('.connection')].find(l =>
     l.dataset.fromNode === fromNodeId && l.dataset.toNode === toNodeId && (!toPortClass || l.dataset.toPortClass === toPortClass));
-  if (line) line.remove();
+  if (line) {
+    const group = line.closest('.connection-group');
+    (group || line).remove();
+  }
 }
 
 function showNodeContextMenu(e, node) {
@@ -1485,7 +1527,10 @@ function clearConnectionsForNode(node) {
   const id = node.dataset.id;
   connections = connections.filter(c => c.fromNode !== id && c.toNode !== id);
   svg.querySelectorAll('.connection').forEach(line => {
-    if (line.dataset.fromNode === id || line.dataset.toNode === id) line.remove();
+    if (line.dataset.fromNode === id || line.dataset.toNode === id) {
+      const group = line.closest('.connection-group');
+      (group || line).remove();
+    }
   });
 }
 
@@ -1511,7 +1556,7 @@ ctxMenu.querySelectorAll('.ctx-item[data-action]').forEach(btn => {
 
 // ─── Load config and init ────────────────────────
 // Inline default config so the app works when opened as file:// (fetch is blocked)
-const DEFAULT_CONFIG = {"machines":{"miner":{"name":"Miner","inputCount":0,"outputCount":1,"oreQualities":[{"id":"impure","name":"Impure","multiplier":0.5},{"id":"normal","name":"Normal","multiplier":1},{"id":"pure","name":"Pure","multiplier":2}],"tiers":[{"id":"mk1","name":"Mk.1","miningSpeed":0.5,"maxOutputPerMin":60},{"id":"mk2","name":"Mk.2","miningSpeed":1,"maxOutputPerMin":120},{"id":"mk3","name":"Mk.3","miningSpeed":2,"maxOutputPerMin":240}]},"smelter":{"name":"Smelter","inputCount":1,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"constructor":{"name":"Constructor","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"assembler":{"name":"Assembler","inputCount":4,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"foundry":{"name":"Foundry","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"refinery":{"name":"Refinery","inputCount":3,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]}},"items":[{"id":"iron_ore","name":"Iron Ore"},{"id":"copper_ore","name":"Copper Ore"},{"id":"limestone","name":"Limestone"},{"id":"coal","name":"Coal"},{"id":"caterium_ore","name":"Caterium Ore"},{"id":"iron_ingot","name":"Iron Ingot"},{"id":"copper_ingot","name":"Copper Ingot"},{"id":"caterium_ingot","name":"Caterium Ingot"},{"id":"iron_plate","name":"Iron Plate"},{"id":"iron_rod","name":"Iron Rod"},{"id":"screw","name":"Screw"},{"id":"concrete","name":"Concrete"},{"id":"copper_sheet","name":"Copper Sheet"},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate"},{"id":"modular_frame","name":"Modular Frame"},{"id":"rotor","name":"Rotor"},{"id":"smart_plating","name":"Smart Plating"},{"id":"cable","name":"Cable"},{"id":"steel_ingot","name":"Steel Ingot"},{"id":"solid_steel_ingot","name":"Solid Steel Ingot"},{"id":"plastic","name":"Plastic"},{"id":"rubber","name":"Rubber"},{"id":"fuel","name":"Fuel"},{"id":"wire","name":"Wire"},{"id":"crude_oil","name":"Crude Oil"},{"id":"water","name":"Water"}],"recipes":[{"id":"iron_ore","name":"Iron Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Iron Ore","amount":60}]},{"id":"copper_ore","name":"Copper Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Copper Ore","amount":60}]},{"id":"limestone","name":"Limestone","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Limestone","amount":60}]},{"id":"coal","name":"Coal","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Coal","amount":60}]},{"id":"caterium_ore","name":"Caterium Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Caterium Ore","amount":60}]},{"id":"iron_ingot","name":"Iron Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Iron Ore","amount":1}],"outputs":[{"item":"Iron Ingot","amount":1}]},{"id":"copper_ingot","name":"Copper Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ore","amount":1}],"outputs":[{"item":"Copper Ingot","amount":1}]},{"id":"caterium_ingot","name":"Caterium Ingot","machine":"smelter","craftingTimeSeconds":4,"inputs":[{"item":"Caterium Ore","amount":3}],"outputs":[{"item":"Caterium Ingot","amount":1}]},{"id":"iron_plate","name":"Iron Plate","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Ingot","amount":30}],"outputs":[{"item":"Iron Plate","amount":20}]},{"id":"iron_rod","name":"Iron Rod","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Iron Ingot","amount":15}],"outputs":[{"item":"Iron Rod","amount":15}]},{"id":"screw","name":"Screw","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Rod","amount":10}],"outputs":[{"item":"Screw","amount":40}]},{"id":"concrete","name":"Concrete","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Limestone","amount":45}],"outputs":[{"item":"Concrete","amount":15}]},{"id":"copper_sheet","name":"Copper Sheet","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Copper Ingot","amount":20}],"outputs":[{"item":"Copper Sheet","amount":10}]},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate","machine":"assembler","craftingTimeSeconds":12,"inputs":[{"item":"Iron Plate","amount":30},{"item":"Screw","amount":60}],"outputs":[{"item":"Reinforced Iron Plate","amount":5}]},{"id":"modular_frame","name":"Modular Frame","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Reinforced Iron Plate","amount":24},{"item":"Iron Rod","amount":12}],"outputs":[{"item":"Modular Frame","amount":4}]},{"id":"rotor","name":"Rotor","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Iron Rod","amount":20},{"item":"Screw","amount":10}],"outputs":[{"item":"Rotor","amount":4}]},{"id":"smart_plating","name":"Smart Plating","machine":"assembler","craftingTimeSeconds":30,"inputs":[{"item":"Reinforced Iron Plate","amount":30},{"item":"Rotor","amount":30}],"outputs":[{"item":"Smart Plating","amount":2}]},{"id":"cable","name":"Cable","machine":"assembler","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ingot","amount":30},{"item":"Wire","amount":60}],"outputs":[{"item":"Cable","amount":30}]},{"id":"steel_ingot","name":"Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ore","amount":45},{"item":"Coal","amount":45}],"outputs":[{"item":"Steel Ingot","amount":45}]},{"id":"solid_steel_ingot","name":"Solid Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ingot","amount":20},{"item":"Coal","amount":20}],"outputs":[{"item":"Solid Steel Ingot","amount":60}]},{"id":"plastic","name":"Plastic","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Plastic","amount":20}]},{"id":"rubber","name":"Rubber","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Rubber","amount":20}]},{"id":"fuel","name":"Fuel","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":60},{"item":"Water","amount":40}],"outputs":[{"item":"Fuel","amount":40}]}]};
+const DEFAULT_CONFIG = {"machines":{"miner":{"name":"Miner","inputCount":0,"outputCount":1,"oreQualities":[{"id":"impure","name":"Impure","multiplier":0.5},{"id":"normal","name":"Normal","multiplier":1},{"id":"pure","name":"Pure","multiplier":2}],"tiers":[{"id":"mk1","name":"Mk.1","miningSpeed":0.5,"maxOutputPerMin":60},{"id":"mk2","name":"Mk.2","miningSpeed":1,"maxOutputPerMin":120},{"id":"mk3","name":"Mk.3","miningSpeed":2,"maxOutputPerMin":240}]},"smelter":{"name":"Smelter","inputCount":1,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"constructor":{"name":"Constructor","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"assembler":{"name":"Assembler","inputCount":4,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"foundry":{"name":"Foundry","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"refinery":{"name":"Refinery","inputCount":3,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"storage_container":{"name":"Storage Container","inputCount":1,"outputCount":1,"slots":24,"maxItems":12000,"tiers":[{"id":"mk1","name":"Mk.1"}]}},"items":[{"id":"iron_ore","name":"Iron Ore"},{"id":"copper_ore","name":"Copper Ore"},{"id":"limestone","name":"Limestone"},{"id":"coal","name":"Coal"},{"id":"caterium_ore","name":"Caterium Ore"},{"id":"iron_ingot","name":"Iron Ingot"},{"id":"copper_ingot","name":"Copper Ingot"},{"id":"caterium_ingot","name":"Caterium Ingot"},{"id":"iron_plate","name":"Iron Plate"},{"id":"iron_rod","name":"Iron Rod"},{"id":"screw","name":"Screw"},{"id":"concrete","name":"Concrete"},{"id":"copper_sheet","name":"Copper Sheet"},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate"},{"id":"modular_frame","name":"Modular Frame"},{"id":"rotor","name":"Rotor"},{"id":"smart_plating","name":"Smart Plating"},{"id":"cable","name":"Cable"},{"id":"steel_ingot","name":"Steel Ingot"},{"id":"solid_steel_ingot","name":"Solid Steel Ingot"},{"id":"plastic","name":"Plastic"},{"id":"rubber","name":"Rubber"},{"id":"fuel","name":"Fuel"},{"id":"wire","name":"Wire"},{"id":"crude_oil","name":"Crude Oil"},{"id":"water","name":"Water"}],"recipes":[{"id":"buffer","name":"Buffer","machine":"storage_container","craftingTimeSeconds":1,"inputs":[{"item":"Any","amount":1}],"outputs":[{"item":"Any","amount":1}]},{"id":"iron_ore","name":"Iron Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Iron Ore","amount":60}]},{"id":"copper_ore","name":"Copper Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Copper Ore","amount":60}]},{"id":"limestone","name":"Limestone","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Limestone","amount":60}]},{"id":"coal","name":"Coal","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Coal","amount":60}]},{"id":"caterium_ore","name":"Caterium Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Caterium Ore","amount":60}]},{"id":"iron_ingot","name":"Iron Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Iron Ore","amount":1}],"outputs":[{"item":"Iron Ingot","amount":1}]},{"id":"copper_ingot","name":"Copper Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ore","amount":1}],"outputs":[{"item":"Copper Ingot","amount":1}]},{"id":"caterium_ingot","name":"Caterium Ingot","machine":"smelter","craftingTimeSeconds":4,"inputs":[{"item":"Caterium Ore","amount":3}],"outputs":[{"item":"Caterium Ingot","amount":1}]},{"id":"iron_plate","name":"Iron Plate","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Ingot","amount":30}],"outputs":[{"item":"Iron Plate","amount":20}]},{"id":"iron_rod","name":"Iron Rod","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Iron Ingot","amount":15}],"outputs":[{"item":"Iron Rod","amount":15}]},{"id":"screw","name":"Screw","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Rod","amount":10}],"outputs":[{"item":"Screw","amount":40}]},{"id":"concrete","name":"Concrete","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Limestone","amount":45}],"outputs":[{"item":"Concrete","amount":15}]},{"id":"copper_sheet","name":"Copper Sheet","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Copper Ingot","amount":20}],"outputs":[{"item":"Copper Sheet","amount":10}]},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate","machine":"assembler","craftingTimeSeconds":12,"inputs":[{"item":"Iron Plate","amount":30},{"item":"Screw","amount":60}],"outputs":[{"item":"Reinforced Iron Plate","amount":5}]},{"id":"modular_frame","name":"Modular Frame","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Reinforced Iron Plate","amount":24},{"item":"Iron Rod","amount":12}],"outputs":[{"item":"Modular Frame","amount":4}]},{"id":"rotor","name":"Rotor","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Iron Rod","amount":20},{"item":"Screw","amount":10}],"outputs":[{"item":"Rotor","amount":4}]},{"id":"smart_plating","name":"Smart Plating","machine":"assembler","craftingTimeSeconds":30,"inputs":[{"item":"Reinforced Iron Plate","amount":30},{"item":"Rotor","amount":30}],"outputs":[{"item":"Smart Plating","amount":2}]},{"id":"cable","name":"Cable","machine":"assembler","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ingot","amount":30},{"item":"Wire","amount":60}],"outputs":[{"item":"Cable","amount":30}]},{"id":"steel_ingot","name":"Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ore","amount":45},{"item":"Coal","amount":45}],"outputs":[{"item":"Steel Ingot","amount":45}]},{"id":"solid_steel_ingot","name":"Solid Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ingot","amount":20},{"item":"Coal","amount":20}],"outputs":[{"item":"Solid Steel Ingot","amount":60}]},{"id":"plastic","name":"Plastic","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Plastic","amount":20}]},{"id":"rubber","name":"Rubber","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Rubber","amount":20}]},{"id":"fuel","name":"Fuel","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":60},{"item":"Water","amount":40}],"outputs":[{"item":"Fuel","amount":40}]}]};
 
 function init() {
   setupCanvasContextMenu();

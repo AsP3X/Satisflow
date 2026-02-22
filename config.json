@@ -64,6 +64,16 @@
         { "id": "mk2", "name": "Mk.2", "craftingSpeed": 2 },
         { "id": "mk3", "name": "Mk.3", "craftingSpeed": 4 }
       ]
+    },
+    "storage_container": {
+      "name": "Storage Container",
+      "inputCount": 1,
+      "outputCount": 1,
+      "slots": 24,
+      "maxItems": 12000,
+      "tiers": [
+        { "id": "mk1", "name": "Mk.1" }
+      ]
     }
   },
   "items": [
@@ -95,6 +105,14 @@
     { "id": "water", "name": "Water" }
   ],
   "recipes": [
+    {
+      "id": "buffer",
+      "name": "Buffer",
+      "machine": "storage_container",
+      "craftingTimeSeconds": 1,
+      "inputs": [{ "item": "Any", "amount": 1 }],
+      "outputs": [{ "item": "Any", "amount": 1 }]
+    },
     {
       "id": "iron_ore",
       "name": "Iron Ore",
