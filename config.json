@@ -37,7 +37,7 @@
     },
     "assembler": {
       "name": "Assembler",
-      "inputCount": 4,
+      "inputCount": 2,
       "outputCount": 1,
       "tiers": [
         { "id": "mk1", "name": "Mk.1", "craftingSpeed": 1 },
@@ -74,6 +74,32 @@
       "tiers": [
         { "id": "mk1", "name": "Mk.1" }
       ]
+    },
+    "splitter": {
+      "name": "Splitter",
+      "inputCount": 1,
+      "outputCount": 3,
+      "tiers": [
+        { "id": "mk1", "name": "Mk.1", "maxFlowPerMin": 60 },
+        { "id": "mk2", "name": "Mk.2", "maxFlowPerMin": 120 },
+        { "id": "mk3", "name": "Mk.3", "maxFlowPerMin": 270 },
+        { "id": "mk4", "name": "Mk.4", "maxFlowPerMin": 480 },
+        { "id": "mk5", "name": "Mk.5", "maxFlowPerMin": 780 },
+        { "id": "mk6", "name": "Mk.6", "maxFlowPerMin": 1200 }
+      ]
+    },
+    "merger": {
+      "name": "Merger",
+      "inputCount": 3,
+      "outputCount": 1,
+      "tiers": [
+        { "id": "mk1", "name": "Mk.1", "maxFlowPerMin": 60 },
+        { "id": "mk2", "name": "Mk.2", "maxFlowPerMin": 120 },
+        { "id": "mk3", "name": "Mk.3", "maxFlowPerMin": 270 },
+        { "id": "mk4", "name": "Mk.4", "maxFlowPerMin": 480 },
+        { "id": "mk5", "name": "Mk.5", "maxFlowPerMin": 780 },
+        { "id": "mk6", "name": "Mk.6", "maxFlowPerMin": 1200 }
+      ]
     }
   },
   "items": [
@@ -96,6 +122,9 @@
     { "id": "smart_plating", "name": "Smart Plating" },
     { "id": "cable", "name": "Cable" },
     { "id": "steel_ingot", "name": "Steel Ingot" },
+    { "id": "steel_beam", "name": "Steel Beam" },
+    { "id": "steel_pipe", "name": "Steel Pipe" },
+    { "id": "quickwire", "name": "Quickwire" },
     { "id": "solid_steel_ingot", "name": "Solid Steel Ingot" },
     { "id": "plastic", "name": "Plastic" },
     { "id": "rubber", "name": "Rubber" },
@@ -182,40 +211,80 @@
       "name": "Iron Plate",
       "machine": "constructor",
       "craftingTimeSeconds": 6,
-      "inputs": [{ "item": "Iron Ingot", "amount": 30 }],
-      "outputs": [{ "item": "Iron Plate", "amount": 20 }]
+      "inputs": [{ "item": "Iron Ingot", "amount": 3 }],
+      "outputs": [{ "item": "Iron Plate", "amount": 2 }]
     },
     {
       "id": "iron_rod",
       "name": "Iron Rod",
       "machine": "constructor",
       "craftingTimeSeconds": 4,
-      "inputs": [{ "item": "Iron Ingot", "amount": 15 }],
-      "outputs": [{ "item": "Iron Rod", "amount": 15 }]
+      "inputs": [{ "item": "Iron Ingot", "amount": 1 }],
+      "outputs": [{ "item": "Iron Rod", "amount": 1 }]
     },
     {
       "id": "screw",
       "name": "Screw",
       "machine": "constructor",
       "craftingTimeSeconds": 6,
-      "inputs": [{ "item": "Iron Rod", "amount": 10 }],
-      "outputs": [{ "item": "Screw", "amount": 40 }]
+      "inputs": [{ "item": "Iron Rod", "amount": 1 }],
+      "outputs": [{ "item": "Screw", "amount": 4 }]
     },
     {
       "id": "concrete",
       "name": "Concrete",
       "machine": "constructor",
       "craftingTimeSeconds": 4,
-      "inputs": [{ "item": "Limestone", "amount": 45 }],
-      "outputs": [{ "item": "Concrete", "amount": 15 }]
+      "inputs": [{ "item": "Limestone", "amount": 3 }],
+      "outputs": [{ "item": "Concrete", "amount": 1 }]
     },
     {
       "id": "copper_sheet",
       "name": "Copper Sheet",
       "machine": "constructor",
       "craftingTimeSeconds": 6,
-      "inputs": [{ "item": "Copper Ingot", "amount": 20 }],
-      "outputs": [{ "item": "Copper Sheet", "amount": 10 }]
+      "inputs": [{ "item": "Copper Ingot", "amount": 2 }],
+      "outputs": [{ "item": "Copper Sheet", "amount": 1 }]
+    },
+    {
+      "id": "wire",
+      "name": "Wire",
+      "machine": "constructor",
+      "craftingTimeSeconds": 4,
+      "inputs": [{ "item": "Copper Ingot", "amount": 1 }],
+      "outputs": [{ "item": "Wire", "amount": 2 }]
+    },
+    {
+      "id": "cable_constructor",
+      "name": "Cable",
+      "machine": "constructor",
+      "craftingTimeSeconds": 2,
+      "inputs": [{ "item": "Wire", "amount": 2 }],
+      "outputs": [{ "item": "Cable", "amount": 1 }]
+    },
+    {
+      "id": "steel_beam",
+      "name": "Steel Beam",
+      "machine": "constructor",
+      "craftingTimeSeconds": 4,
+      "inputs": [{ "item": "Steel Ingot", "amount": 4 }],
+      "outputs": [{ "item": "Steel Beam", "amount": 1 }]
+    },
+    {
+      "id": "steel_pipe",
+      "name": "Steel Pipe",
+      "machine": "constructor",
+      "craftingTimeSeconds": 6,
+      "inputs": [{ "item": "Steel Ingot", "amount": 3 }],
+      "outputs": [{ "item": "Steel Pipe", "amount": 2 }]
+    },
+    {
+      "id": "quickwire",
+      "name": "Quickwire",
+      "machine": "constructor",
+      "craftingTimeSeconds": 5,
+      "inputs": [{ "item": "Caterium Ingot", "amount": 1 }],
+      "outputs": [{ "item": "Quickwire", "amount": 5 }]
     },
     {
       "id": "reinforced_iron_plate",
@@ -223,10 +292,10 @@
       "machine": "assembler",
       "craftingTimeSeconds": 12,
       "inputs": [
-        { "item": "Iron Plate", "amount": 30 },
-        { "item": "Screw", "amount": 60 }
+        { "item": "Iron Plate", "amount": 4 },
+        { "item": "Screw", "amount": 8 }
       ],
-      "outputs": [{ "item": "Reinforced Iron Plate", "amount": 5 }]
+      "outputs": [{ "item": "Reinforced Iron Plate", "amount": 1 }]
     },
     {
       "id": "modular_frame",
@@ -234,10 +303,10 @@
       "machine": "assembler",
       "craftingTimeSeconds": 15,
       "inputs": [
-        { "item": "Reinforced Iron Plate", "amount": 24 },
-        { "item": "Iron Rod", "amount": 12 }
+        { "item": "Reinforced Iron Plate", "amount": 4 },
+        { "item": "Iron Rod", "amount": 2 }
       ],
-      "outputs": [{ "item": "Modular Frame", "amount": 4 }]
+      "outputs": [{ "item": "Modular Frame", "amount": 1 }]
     },
     {
       "id": "rotor",
@@ -245,10 +314,10 @@
       "machine": "assembler",
       "craftingTimeSeconds": 15,
       "inputs": [
-        { "item": "Iron Rod", "amount": 20 },
-        { "item": "Screw", "amount": 10 }
+        { "item": "Iron Rod", "amount": 3 },
+        { "item": "Screw", "amount": 6 }
       ],
-      "outputs": [{ "item": "Rotor", "amount": 4 }]
+      "outputs": [{ "item": "Rotor", "amount": 1 }]
     },
     {
       "id": "smart_plating",
@@ -256,10 +325,10 @@
       "machine": "assembler",
       "craftingTimeSeconds": 30,
       "inputs": [
-        { "item": "Reinforced Iron Plate", "amount": 30 },
-        { "item": "Rotor", "amount": 30 }
+        { "item": "Reinforced Iron Plate", "amount": 2 },
+        { "item": "Rotor", "amount": 2 }
       ],
-      "outputs": [{ "item": "Smart Plating", "amount": 2 }]
+      "outputs": [{ "item": "Smart Plating", "amount": 1 }]
     },
     {
       "id": "cable",
@@ -267,10 +336,10 @@
       "machine": "assembler",
       "craftingTimeSeconds": 2,
       "inputs": [
-        { "item": "Copper Ingot", "amount": 30 },
-        { "item": "Wire", "amount": 60 }
+        { "item": "Copper Ingot", "amount": 2 },
+        { "item": "Wire", "amount": 2 }
       ],
-      "outputs": [{ "item": "Cable", "amount": 30 }]
+      "outputs": [{ "item": "Cable", "amount": 2 }]
     },
     {
       "id": "steel_ingot",

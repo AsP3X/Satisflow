@@ -23,7 +23,7 @@ let machinesList = [];
 let recipesByMachine = {};
 let recipeListByMachine = {};
 
-const MACHINE_ICONS = { miner: '⛏️', smelter: '♨️', constructor: '🔩', assembler: '⚙️', foundry: '🏭', refinery: '🛢️', storage_container: '📦' };
+const MACHINE_ICONS = { miner: '⛏️', smelter: '♨️', constructor: '🔩', assembler: '⚙️', foundry: '🏭', refinery: '🛢️', storage_container: '📦', splitter: '⇉', merger: '⇄' };
 
 function buildConfigLookups() {
   if (!APP_CONFIG || !APP_CONFIG.machines || !APP_CONFIG.recipes) return;
@@ -120,6 +120,7 @@ function restoreState(state) {
     }
   });
   updateAllLines();
+  nodes.forEach(n => updateNodeInputLabels(n));
 }
 function getMachineDef(type) {
   return APP_CONFIG && APP_CONFIG.machines ? APP_CONFIG.machines[type] : null;
@@ -127,7 +128,12 @@ function getMachineDef(type) {
 
 function getInputCount(type) {
   const def = getMachineDef(type);
-  return def && def.inputCount != null ? def.inputCount : (type === 'miner' ? 0 : type === 'smelter' ? 1 : type === 'constructor' ? 2 : type === 'assembler' ? 4 : type === 'foundry' ? 2 : type === 'storage_container' ? 1 : 3);
+  return def && def.inputCount != null ? def.inputCount : (type === 'miner' ? 0 : type === 'smelter' ? 1 : type === 'constructor' ? 2 : type === 'assembler' ? 2 : type === 'foundry' ? 2 : type === 'storage_container' ? 1 : type === 'splitter' ? 1 : type === 'merger' ? 3 : 3);
+}
+
+function getOutputCount(type) {
+  const def = getMachineDef(type);
+  return def && def.outputCount != null ? def.outputCount : 1;
 }
 
 function createNodeFromData(nd) {
@@ -153,8 +159,10 @@ function createNodeFromData(nd) {
   }
   const icon = MACHINE_ICONS[type] || '📦';
   const def = getMachineDef(type);
-  const tierName = (def && def.tiers) ? (def.tiers.find(t => t.id === tier) || def.tiers[0])?.name || tier : '';
-  const label = nd.name || `${icon} ${def?.name || type} ${tierName}`.trim();
+  const tierDef = (def && def.tiers) ? (def.tiers.find(t => t.id === tier) || def.tiers[0]) : null;
+  const tierName = tierDef?.name || tier || '';
+  const flowSuffix = (type === 'splitter' || type === 'merger') && tierDef && tierDef.maxFlowPerMin != null ? ` · ${tierDef.maxFlowPerMin}/min` : '';
+  const label = nd.name || `${icon} ${def?.name || type} ${tierName}${flowSuffix}`.trim();
   const productName = node.dataset.item || '';
   node.innerHTML = `
     <div class="node-header">${label}</div>
@@ -162,9 +170,10 @@ function createNodeFromData(nd) {
   `;
   const portsContainer = document.createElement('div');
   portsContainer.style.cssText = 'position:absolute;inset:0;pointer-events:auto';
-  portsContainer.appendChild(createPort('output', 'output'));
+  const outputCount = getOutputCount(type);
+  for (let i = 1; i <= outputCount; i++) portsContainer.appendChild(createPort('output', outputCount > 1 ? 'output-' + i : 'output'));
   const inputCount = getInputCount(type);
-  for (let i = 1; i <= inputCount; i++) portsContainer.appendChild(createPort('input', 'input-' + i));
+  for (let i = 1; i <= inputCount; i++) portsContainer.appendChild(createInputPortWithLabel('input-' + i));
   node.appendChild(portsContainer);
   canvas.appendChild(node);
   makeDraggable(node);
@@ -179,6 +188,7 @@ function createNodeFromData(nd) {
       startConnectionDrag(port, e);
     });
   });
+  updateNodeInputLabels(node);
   return node;
 }
 function selectNode(node, addToSelection) {
@@ -628,9 +638,11 @@ function buildNodeElement(type, x, y, icon, tierId) {
     node.dataset.oreQuality = getMinerDefaultOreQualityId();
   }
   const def = getMachineDef(type);
-  const tierName = (def && def.tiers) ? (def.tiers.find(t => t.id === tierId) || def.tiers[0])?.name || '' : '';
+  const tier = (def && def.tiers) ? (def.tiers.find(t => t.id === tierId) || def.tiers[0]) : null;
+  const tierName = tier?.name || '';
   const slotsSuffix = (def && def.slots) ? ` · ${def.slots} slots` : '';
-  const typeLabel = def ? `${def.name}${slotsSuffix} ${tierName}`.trim() : (type.charAt(0).toUpperCase() + type.slice(1));
+  const flowSuffix = (type === 'splitter' || type === 'merger') && tier && tier.maxFlowPerMin != null ? ` · ${tier.maxFlowPerMin}/min` : '';
+  const typeLabel = def ? `${def.name}${slotsSuffix} ${tierName}${flowSuffix}`.trim() : (type.charAt(0).toUpperCase() + type.slice(1));
   if (type === 'miner') {
     node.dataset.rate = String(getMinerCalculatedRate(tierId, node.dataset.oreQuality));
     node.dataset.miningRate = node.dataset.rate;
@@ -645,10 +657,12 @@ function buildNodeElement(type, x, y, icon, tierId) {
 
   const portsContainer = document.createElement('div');
   portsContainer.style.cssText = 'position:absolute;inset:0;pointer-events:auto';
-  portsContainer.appendChild(createPort('output', 'output'));
+  const outputCount = getOutputCount(type);
+  for (let i = 1; i <= outputCount; i++) portsContainer.appendChild(createPort('output', outputCount > 1 ? 'output-' + i : 'output'));
   const inputCount = getInputCount(type);
-  for (let i = 1; i <= inputCount; i++) portsContainer.appendChild(createPort('input', 'input-' + i));
+  for (let i = 1; i <= inputCount; i++) portsContainer.appendChild(createInputPortWithLabel('input-' + i));
   node.appendChild(portsContainer);
+  updateNodeInputLabels(node);
   return node;
 }
 
@@ -694,6 +708,57 @@ function createPort(type, className = '') {
   port.className = `port ${type} ${className}`;
   port.dataset.portType = type;
   return port;
+}
+
+function createInputPortWithLabel(portClass) {
+  const wrap = document.createElement('div');
+  wrap.className = `port-input-wrap ${portClass}`;
+  const port = createPort('input', portClass);
+  const label = document.createElement('span');
+  label.className = 'port-input-label';
+  wrap.appendChild(port);
+  wrap.appendChild(label);
+  return wrap;
+}
+
+function updateNodeInputLabels(node) {
+  if (!node) return;
+  const nodeId = node.dataset.id;
+  const type = node.dataset.type;
+  const item = node.dataset.item;
+  const opts = recipeListByMachine[type] || [];
+  const recipe = opts.find(r => (r.item || r.name) === item) || opts[0];
+  const wraps = node.querySelectorAll('.port-input-wrap');
+  wraps.forEach(wrap => {
+    const port = wrap.querySelector('.port');
+    const labelEl = wrap.querySelector('.port-input-label');
+    if (!port || !labelEl) return;
+    const isConnected = connections.some(c => c.toNode === nodeId && c.toPort === port.className);
+    if (isConnected) {
+      labelEl.textContent = '';
+      labelEl.classList.remove('visible');
+      return;
+    }
+    if (!recipe || !recipe.inputs || !recipe.inputs.length) {
+      labelEl.textContent = '';
+      labelEl.classList.remove('visible');
+      return;
+    }
+    const portClass = port.className;
+    const match = portClass.match(/input-(\d+)/);
+    const index = match ? parseInt(match[1], 10) - 1 : 0;
+    const inp = recipe.inputs[index];
+    const rates = [recipe.in, recipe.in2, recipe.in3, recipe.in4];
+    const rate = rates[index];
+    if (!inp || rate == null) {
+      labelEl.textContent = '';
+      labelEl.classList.remove('visible');
+      return;
+    }
+    const perMin = Math.round(rate * 10) / 10;
+    labelEl.textContent = `${inp.item} ${perMin}/min`;
+    labelEl.classList.add('visible');
+  });
 }
 
 // Satisfactory miner formula: output/min = base rate (Mk.1=60, Mk.2=120, Mk.3=240) × node purity (Impure=0.5, Normal=1, Pure=2).
@@ -1061,6 +1126,8 @@ function drawConnection(fromPort, toPort) {
   line.dataset.fromPortClass = fromPort.className;
   line.dataset.toPortClass   = toPort.className;
   updateAllLines();
+  const toNode = toPort.closest('.node');
+  if (toNode) updateNodeInputLabels(toNode);
 }
 
 function getPortCenter(port, canvasRect) {
@@ -1135,8 +1202,12 @@ function updateAllLines() {
     const labelBgEl = group ? group.querySelector('.connection-label-bg') : null;
     if (labelEl && fromNode) {
       const item = fromNode.dataset.item || 'Item';
-      const rate = fromNode.dataset.rate != null ? fromNode.dataset.rate : '0';
-      labelEl.textContent = `${item} ${rate}/min`;
+      let rate = parseFloat(fromNode.dataset.rate != null ? fromNode.dataset.rate : 0);
+      if (fromNode.dataset.type === 'splitter') {
+        const outCount = [...svg.querySelectorAll('.connection')].filter(l => l.dataset.fromNode === fromNode.dataset.id).length;
+        if (outCount > 0) rate = rate / outCount;
+      }
+      labelEl.textContent = `${item} ${Number.isFinite(rate) ? rate : 0}/min`;
       const midX = (p1.x + 3 * hx1 + 3 * hx2 + p2.x) / 8;
       const midY = (p1.y + p2.y) / 2;
       labelEl.setAttribute('x', midX);
@@ -1164,6 +1235,68 @@ function getIncomingByPort(nodeId) {
   list.sort((a, b) => (a.toPort || '').localeCompare(b.toPort || ''));
   return list;
 }
+
+function getOutgoingConnections(nodeId) {
+  return connections.filter(c => c.fromNode === nodeId);
+}
+
+function getRequiredInputFromPort(downstreamNode, toPortClass) {
+  const type = downstreamNode.dataset.type;
+  const rate = parseFloat(downstreamNode.dataset.rate || 0);
+  if (rate <= 0) return 0;
+  if (type === 'splitter') {
+    return rate;
+  }
+  if (type === 'merger') return 0;
+  const recipe = getRecipeForNode(downstreamNode);
+  if (!recipe || !recipe.out || recipe.out <= 0) return 0;
+  const match = (toPortClass || '').match(/input-(\d+)/);
+  const index = match ? parseInt(match[1], 10) - 1 : 0;
+  const inRates = [recipe.in, recipe.in2, recipe.in3, recipe.in4];
+  const inRate = inRates[index];
+  if (inRate == null) return 0;
+  return (rate / recipe.out) * inRate;
+}
+
+function runBackwardPass() {
+  const sinks = nodes.filter(n => !getOutgoingConnections(n.dataset.id).length);
+  const order = [];
+  const seen = new Set();
+  let queue = [...sinks];
+  while (queue.length) {
+    const n = queue.shift();
+    if (seen.has(n.dataset.id)) continue;
+    seen.add(n.dataset.id);
+    order.push(n);
+    const incoming = getIncomingByPort(n.dataset.id);
+    incoming.forEach(c => {
+      const fromNode = nodeById.get(c.fromNode);
+      if (fromNode && !seen.has(fromNode.dataset.id)) queue.push(fromNode);
+    });
+  }
+  order.forEach(downstreamNode => {
+    const rate = parseFloat(downstreamNode.dataset.rate || 0);
+    if (rate <= 0) return;
+    const incoming = getIncomingByPort(downstreamNode.dataset.id);
+    incoming.forEach(c => {
+      const fromNode = nodeById.get(c.fromNode);
+      if (!fromNode) return;
+      const required = getRequiredInputFromPort(downstreamNode, c.toPort);
+      if (required <= 0) return;
+      let newRate = Math.max(parseFloat(fromNode.dataset.rate || 0), required);
+      if (hasCalculatedRate(fromNode.dataset.type)) {
+        const maxOut = fromNode.dataset.type === 'miner'
+          ? getMinerCalculatedRate(fromNode.dataset.tier || 'mk1', fromNode.dataset.oreQuality)
+          : getCraftingMachineCalculatedRate(fromNode.dataset.type, fromNode.dataset.tier || 'mk1', fromNode.dataset.item);
+        newRate = Math.min(newRate, maxOut);
+      }
+      fromNode.dataset.rate = String(newRate);
+      const rateEl = fromNode.querySelector('.node-rate');
+      if (rateEl) rateEl.value = String(newRate);
+    });
+  });
+}
+
 document.getElementById('calc-btn').onclick = () => {
   nodes.forEach(n => {
     n.dataset.rate = '0';
@@ -1190,8 +1323,34 @@ document.getElementById('calc-btn').onclick = () => {
     nodes.forEach(node => {
       if (parseFloat(node.dataset.rate) > 0) return;
       const ins = getIncomingByPort(node.dataset.id);
-      if (ins.length === 0) return;
+      const type = node.dataset.type;
 
+      if (type === 'splitter') {
+        if (ins.length !== 1) return;
+        const src = nodes.find(n => n.dataset.id === ins[0].fromNode);
+        const inRate = parseFloat(src?.dataset?.rate || 0);
+        if (inRate <= 0) return;
+        node.dataset.rate = String(inRate);
+        node.dataset.item = src?.dataset?.item || 'Item';
+        updated = true;
+        return;
+      }
+      if (type === 'merger') {
+        if (ins.length === 0) return;
+        const inputs = ins.map(c => {
+          const src = nodes.find(n => n.dataset.id === c.fromNode);
+          return parseFloat(src?.dataset?.rate || 0);
+        });
+        const total = inputs.reduce((a, b) => a + b, 0);
+        if (total <= 0) return;
+        const firstSrc = nodes.find(n => n.dataset.id === ins[0].fromNode);
+        node.dataset.rate = String(total);
+        node.dataset.item = firstSrc?.dataset?.item || 'Item';
+        updated = true;
+        return;
+      }
+
+      if (ins.length === 0) return;
       const recipe = getRecipeForNode(node);
       if (!recipe) return;
 
@@ -1216,6 +1375,84 @@ document.getElementById('calc-btn').onclick = () => {
       updated = true;
     });
   }
+
+  const sinks = nodes.filter(n => !getOutgoingConnections(n.dataset.id).length);
+  sinks.forEach(n => {
+    if (parseFloat(n.dataset.rate || 0) > 0) return;
+    const recipe = getRecipeForNode(n);
+    if (recipe && recipe.out) {
+      n.dataset.rate = String(recipe.out);
+      const rateEl = n.querySelector('.node-rate');
+      if (rateEl) rateEl.value = String(recipe.out);
+    }
+  });
+
+  runBackwardPass();
+
+  updated = true;
+  safety = 0;
+  while (updated && safety++ < 50) {
+    updated = false;
+    nodes.forEach(node => {
+      const ins = getIncomingByPort(node.dataset.id);
+      if (ins.length === 0) return;
+      const type = node.dataset.type;
+      if (type === 'splitter') {
+        if (ins.length !== 1) return;
+        const src = nodes.find(n => n.dataset.id === ins[0].fromNode);
+        const inRate = parseFloat(src?.dataset?.rate || 0);
+        if (inRate <= 0) return;
+        const prev = parseFloat(node.dataset.rate || 0);
+        if (Math.abs(inRate - prev) < 1e-6) return;
+        node.dataset.rate = String(inRate);
+        node.dataset.item = src?.dataset?.item || 'Item';
+        const rateEl = node.querySelector('.node-rate');
+        if (rateEl) rateEl.value = String(inRate);
+        updated = true;
+        return;
+      }
+      if (type === 'merger') {
+        const inputs = ins.map(c => {
+          const src = nodes.find(n => n.dataset.id === c.fromNode);
+          return parseFloat(src?.dataset?.rate || 0);
+        });
+        const total = inputs.reduce((a, b) => a + b, 0);
+        const prev = parseFloat(node.dataset.rate || 0);
+        if (Math.abs(total - prev) < 1e-6) return;
+        const firstSrc = nodes.find(n => n.dataset.id === ins[0].fromNode);
+        node.dataset.rate = String(total);
+        node.dataset.item = firstSrc?.dataset?.item || 'Item';
+        const rateEl = node.querySelector('.node-rate');
+        if (rateEl) rateEl.value = String(total);
+        updated = true;
+        return;
+      }
+      const recipe = getRecipeForNode(node);
+      if (!recipe) return;
+      const inputs = ins.map(c => {
+        const src = nodes.find(n => n.dataset.id === c.fromNode);
+        return parseFloat(src?.dataset?.rate || 0);
+      });
+      const inKeys = ['in', 'in2', 'in3', 'in4'].filter(k => recipe[k] != null);
+      let eff = 1;
+      if (inKeys.length > 0) {
+        eff = Math.min(...inKeys.map((k, i) => {
+          const need = recipe[k];
+          const avail = inputs[i] ?? 0;
+          return need > 0 ? avail / need : 1;
+        }));
+      }
+      const produced = eff * recipe.out;
+      const prev = parseFloat(node.dataset.rate || 0);
+      if (Math.abs(produced - prev) < 1e-6) return;
+      node.dataset.rate = String(produced);
+      const rateEl = node.querySelector('.node-rate');
+      if (rateEl) rateEl.value = produced.toFixed(1);
+      updated = true;
+    });
+  }
+
+  nodes.forEach(n => updateNodeInputLabels(n));
 
   if (safety >= 50) toast('Possible loop or complex graph', true);
   else toast('Rates calculated');
@@ -1279,7 +1516,7 @@ document.getElementById('import-file-input').addEventListener('change', e => {
         const fromNode = nodes.find(n => n.dataset.id === String(c.fromNode));
         const toNode = nodes.find(n => n.dataset.id === String(c.toNode));
         if (!fromNode || !toNode) return;
-        const fromPort = fromNode.querySelector('.port.output');
+        const fromPort = findPortByClass(fromNode, c.fromPort) || fromNode.querySelector('.port.output');
         const toPort = findPortByClass(toNode, c.toPort) || toNode.querySelector('.port.input');
         if (fromPort && toPort) {
           connections.push({
@@ -1292,6 +1529,7 @@ document.getElementById('import-file-input').addEventListener('change', e => {
         }
       });
       updateAllLines();
+      nodes.forEach(n => updateNodeInputLabels(n));
       toast('Flow imported');
     } catch (err) {
       toast('Invalid JSON: ' + (err.message || 'parse error'), true);
@@ -1304,10 +1542,33 @@ document.getElementById('import-file-input').addEventListener('change', e => {
 const editOverlay = document.getElementById('edit-dialog-overlay');
 const editNameInput = document.getElementById('edit-dialog-name');
 const editProductionSelect = document.getElementById('edit-dialog-production');
+const editRecipeInputsEl = document.getElementById('edit-dialog-recipe-inputs');
 const editRateInput = document.getElementById('edit-dialog-rate');
 const editOreQualityWrap = document.getElementById('edit-dialog-ore-quality-wrap');
 const editOreQualitySelect = document.getElementById('edit-dialog-ore-quality');
 let editDialogNode = null;
+
+function updateEditDialogRecipeInputs() {
+  if (!editRecipeInputsEl) return;
+  if (!editDialogNode) {
+    editRecipeInputsEl.textContent = '';
+    return;
+  }
+  const type = editDialogNode.dataset.type;
+  const item = editProductionSelect?.value;
+  const opts = recipeListByMachine[type] || [];
+  const recipe = opts.find(r => (r.item || r.name) === item) || opts[0];
+  if (!recipe || !recipe.inputs?.length) {
+    editRecipeInputsEl.textContent = '';
+    return;
+  }
+  const rates = [recipe.in, recipe.in2, recipe.in3, recipe.in4].filter(n => n != null && n > 0);
+  const parts = (recipe.inputs || []).slice(0, 4).map((inp, i) => {
+    const perMin = rates[i] != null ? Math.round(rates[i] * 10) / 10 : '';
+    return perMin ? `${perMin}/min ${inp.item}` : null;
+  }).filter(Boolean);
+  editRecipeInputsEl.textContent = parts.length ? parts.join(', ') : '';
+}
 
 function openEditDialog(node) {
   editDialogNode = node;
@@ -1335,6 +1596,7 @@ function openEditDialog(node) {
     editProductionSelect.appendChild(opt);
   });
   editProductionSelect.value = node.dataset.item || (opts[0] && (opts[0].item || opts[0].name)) || '';
+  updateEditDialogRecipeInputs();
 
   if (type === 'smelter') {
     editProductionSelect._smelterRateUpdater = () => {
@@ -1342,11 +1604,18 @@ function openEditDialog(node) {
         const rate = getCraftingMachineCalculatedRate('smelter', editDialogNode.dataset.tier || 'mk1', editProductionSelect.value);
         editRateInput.value = String(rate);
       }
+      updateEditDialogRecipeInputs();
     };
     editProductionSelect.addEventListener('change', editProductionSelect._smelterRateUpdater);
-  } else if (editProductionSelect._smelterRateUpdater) {
-    editProductionSelect.removeEventListener('change', editProductionSelect._smelterRateUpdater);
-    editProductionSelect._smelterRateUpdater = null;
+  } else {
+    if (editProductionSelect._smelterRateUpdater) {
+      editProductionSelect.removeEventListener('change', editProductionSelect._smelterRateUpdater);
+      editProductionSelect._smelterRateUpdater = null;
+    }
+    if (opts.length > 0) {
+      editProductionSelect._recipeInputsUpdater = () => updateEditDialogRecipeInputs();
+      editProductionSelect.addEventListener('change', editProductionSelect._recipeInputsUpdater);
+    }
   }
 
   if (editOreQualityWrap && editOreQualitySelect) {
@@ -1390,6 +1659,10 @@ function closeEditDialog() {
     editProductionSelect.removeEventListener('change', editProductionSelect._smelterRateUpdater);
     editProductionSelect._smelterRateUpdater = null;
   }
+  if (editProductionSelect._recipeInputsUpdater) {
+    editProductionSelect.removeEventListener('change', editProductionSelect._recipeInputsUpdater);
+    editProductionSelect._recipeInputsUpdater = null;
+  }
   editDialogNode = null;
 }
 
@@ -1423,6 +1696,7 @@ function saveEditDialog() {
       if (rateEl) rateEl.value = String(rateNum);
     }
   }
+  updateNodeInputLabels(node);
   closeEditDialog();
 }
 
@@ -1453,6 +1727,8 @@ function removeConnection(fromNodeId, toNodeId, toPortClass) {
     const group = line.closest('.connection-group');
     (group || line).remove();
   }
+  const toNode = nodeById.get(toNodeId);
+  if (toNode) updateNodeInputLabels(toNode);
 }
 
 function showNodeContextMenu(e, node) {
@@ -1556,7 +1832,7 @@ ctxMenu.querySelectorAll('.ctx-item[data-action]').forEach(btn => {
 
 // ─── Load config and init ────────────────────────
 // Inline default config so the app works when opened as file:// (fetch is blocked)
-const DEFAULT_CONFIG = {"machines":{"miner":{"name":"Miner","inputCount":0,"outputCount":1,"oreQualities":[{"id":"impure","name":"Impure","multiplier":0.5},{"id":"normal","name":"Normal","multiplier":1},{"id":"pure","name":"Pure","multiplier":2}],"tiers":[{"id":"mk1","name":"Mk.1","miningSpeed":0.5,"maxOutputPerMin":60},{"id":"mk2","name":"Mk.2","miningSpeed":1,"maxOutputPerMin":120},{"id":"mk3","name":"Mk.3","miningSpeed":2,"maxOutputPerMin":240}]},"smelter":{"name":"Smelter","inputCount":1,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"constructor":{"name":"Constructor","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"assembler":{"name":"Assembler","inputCount":4,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"foundry":{"name":"Foundry","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"refinery":{"name":"Refinery","inputCount":3,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"storage_container":{"name":"Storage Container","inputCount":1,"outputCount":1,"slots":24,"maxItems":12000,"tiers":[{"id":"mk1","name":"Mk.1"}]}},"items":[{"id":"iron_ore","name":"Iron Ore"},{"id":"copper_ore","name":"Copper Ore"},{"id":"limestone","name":"Limestone"},{"id":"coal","name":"Coal"},{"id":"caterium_ore","name":"Caterium Ore"},{"id":"iron_ingot","name":"Iron Ingot"},{"id":"copper_ingot","name":"Copper Ingot"},{"id":"caterium_ingot","name":"Caterium Ingot"},{"id":"iron_plate","name":"Iron Plate"},{"id":"iron_rod","name":"Iron Rod"},{"id":"screw","name":"Screw"},{"id":"concrete","name":"Concrete"},{"id":"copper_sheet","name":"Copper Sheet"},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate"},{"id":"modular_frame","name":"Modular Frame"},{"id":"rotor","name":"Rotor"},{"id":"smart_plating","name":"Smart Plating"},{"id":"cable","name":"Cable"},{"id":"steel_ingot","name":"Steel Ingot"},{"id":"solid_steel_ingot","name":"Solid Steel Ingot"},{"id":"plastic","name":"Plastic"},{"id":"rubber","name":"Rubber"},{"id":"fuel","name":"Fuel"},{"id":"wire","name":"Wire"},{"id":"crude_oil","name":"Crude Oil"},{"id":"water","name":"Water"}],"recipes":[{"id":"buffer","name":"Buffer","machine":"storage_container","craftingTimeSeconds":1,"inputs":[{"item":"Any","amount":1}],"outputs":[{"item":"Any","amount":1}]},{"id":"iron_ore","name":"Iron Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Iron Ore","amount":60}]},{"id":"copper_ore","name":"Copper Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Copper Ore","amount":60}]},{"id":"limestone","name":"Limestone","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Limestone","amount":60}]},{"id":"coal","name":"Coal","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Coal","amount":60}]},{"id":"caterium_ore","name":"Caterium Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Caterium Ore","amount":60}]},{"id":"iron_ingot","name":"Iron Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Iron Ore","amount":1}],"outputs":[{"item":"Iron Ingot","amount":1}]},{"id":"copper_ingot","name":"Copper Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ore","amount":1}],"outputs":[{"item":"Copper Ingot","amount":1}]},{"id":"caterium_ingot","name":"Caterium Ingot","machine":"smelter","craftingTimeSeconds":4,"inputs":[{"item":"Caterium Ore","amount":3}],"outputs":[{"item":"Caterium Ingot","amount":1}]},{"id":"iron_plate","name":"Iron Plate","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Ingot","amount":30}],"outputs":[{"item":"Iron Plate","amount":20}]},{"id":"iron_rod","name":"Iron Rod","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Iron Ingot","amount":15}],"outputs":[{"item":"Iron Rod","amount":15}]},{"id":"screw","name":"Screw","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Rod","amount":10}],"outputs":[{"item":"Screw","amount":40}]},{"id":"concrete","name":"Concrete","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Limestone","amount":45}],"outputs":[{"item":"Concrete","amount":15}]},{"id":"copper_sheet","name":"Copper Sheet","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Copper Ingot","amount":20}],"outputs":[{"item":"Copper Sheet","amount":10}]},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate","machine":"assembler","craftingTimeSeconds":12,"inputs":[{"item":"Iron Plate","amount":30},{"item":"Screw","amount":60}],"outputs":[{"item":"Reinforced Iron Plate","amount":5}]},{"id":"modular_frame","name":"Modular Frame","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Reinforced Iron Plate","amount":24},{"item":"Iron Rod","amount":12}],"outputs":[{"item":"Modular Frame","amount":4}]},{"id":"rotor","name":"Rotor","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Iron Rod","amount":20},{"item":"Screw","amount":10}],"outputs":[{"item":"Rotor","amount":4}]},{"id":"smart_plating","name":"Smart Plating","machine":"assembler","craftingTimeSeconds":30,"inputs":[{"item":"Reinforced Iron Plate","amount":30},{"item":"Rotor","amount":30}],"outputs":[{"item":"Smart Plating","amount":2}]},{"id":"cable","name":"Cable","machine":"assembler","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ingot","amount":30},{"item":"Wire","amount":60}],"outputs":[{"item":"Cable","amount":30}]},{"id":"steel_ingot","name":"Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ore","amount":45},{"item":"Coal","amount":45}],"outputs":[{"item":"Steel Ingot","amount":45}]},{"id":"solid_steel_ingot","name":"Solid Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ingot","amount":20},{"item":"Coal","amount":20}],"outputs":[{"item":"Solid Steel Ingot","amount":60}]},{"id":"plastic","name":"Plastic","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Plastic","amount":20}]},{"id":"rubber","name":"Rubber","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Rubber","amount":20}]},{"id":"fuel","name":"Fuel","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":60},{"item":"Water","amount":40}],"outputs":[{"item":"Fuel","amount":40}]}]};
+const DEFAULT_CONFIG = {"machines":{"miner":{"name":"Miner","inputCount":0,"outputCount":1,"oreQualities":[{"id":"impure","name":"Impure","multiplier":0.5},{"id":"normal","name":"Normal","multiplier":1},{"id":"pure","name":"Pure","multiplier":2}],"tiers":[{"id":"mk1","name":"Mk.1","miningSpeed":0.5,"maxOutputPerMin":60},{"id":"mk2","name":"Mk.2","miningSpeed":1,"maxOutputPerMin":120},{"id":"mk3","name":"Mk.3","miningSpeed":2,"maxOutputPerMin":240}]},"smelter":{"name":"Smelter","inputCount":1,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"constructor":{"name":"Constructor","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"assembler":{"name":"Assembler","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"foundry":{"name":"Foundry","inputCount":2,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"refinery":{"name":"Refinery","inputCount":3,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","craftingSpeed":1},{"id":"mk2","name":"Mk.2","craftingSpeed":2},{"id":"mk3","name":"Mk.3","craftingSpeed":4}]},"storage_container":{"name":"Storage Container","inputCount":1,"outputCount":1,"slots":24,"maxItems":12000,"tiers":[{"id":"mk1","name":"Mk.1"}]},"splitter":{"name":"Splitter","inputCount":1,"outputCount":3,"tiers":[{"id":"mk1","name":"Mk.1","maxFlowPerMin":60},{"id":"mk2","name":"Mk.2","maxFlowPerMin":120},{"id":"mk3","name":"Mk.3","maxFlowPerMin":270},{"id":"mk4","name":"Mk.4","maxFlowPerMin":480},{"id":"mk5","name":"Mk.5","maxFlowPerMin":780},{"id":"mk6","name":"Mk.6","maxFlowPerMin":1200}]},"merger":{"name":"Merger","inputCount":3,"outputCount":1,"tiers":[{"id":"mk1","name":"Mk.1","maxFlowPerMin":60},{"id":"mk2","name":"Mk.2","maxFlowPerMin":120},{"id":"mk3","name":"Mk.3","maxFlowPerMin":270},{"id":"mk4","name":"Mk.4","maxFlowPerMin":480},{"id":"mk5","name":"Mk.5","maxFlowPerMin":780},{"id":"mk6","name":"Mk.6","maxFlowPerMin":1200}]}},"items":[{"id":"iron_ore","name":"Iron Ore"},{"id":"copper_ore","name":"Copper Ore"},{"id":"limestone","name":"Limestone"},{"id":"coal","name":"Coal"},{"id":"caterium_ore","name":"Caterium Ore"},{"id":"iron_ingot","name":"Iron Ingot"},{"id":"copper_ingot","name":"Copper Ingot"},{"id":"caterium_ingot","name":"Caterium Ingot"},{"id":"iron_plate","name":"Iron Plate"},{"id":"iron_rod","name":"Iron Rod"},{"id":"screw","name":"Screw"},{"id":"concrete","name":"Concrete"},{"id":"copper_sheet","name":"Copper Sheet"},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate"},{"id":"modular_frame","name":"Modular Frame"},{"id":"rotor","name":"Rotor"},{"id":"smart_plating","name":"Smart Plating"},{"id":"cable","name":"Cable"},{"id":"steel_ingot","name":"Steel Ingot"},{"id":"steel_beam","name":"Steel Beam"},{"id":"steel_pipe","name":"Steel Pipe"},{"id":"quickwire","name":"Quickwire"},{"id":"solid_steel_ingot","name":"Solid Steel Ingot"},{"id":"plastic","name":"Plastic"},{"id":"rubber","name":"Rubber"},{"id":"fuel","name":"Fuel"},{"id":"wire","name":"Wire"},{"id":"crude_oil","name":"Crude Oil"},{"id":"water","name":"Water"}],"recipes":[{"id":"buffer","name":"Buffer","machine":"storage_container","craftingTimeSeconds":1,"inputs":[{"item":"Any","amount":1}],"outputs":[{"item":"Any","amount":1}]},{"id":"iron_ore","name":"Iron Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Iron Ore","amount":60}]},{"id":"copper_ore","name":"Copper Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Copper Ore","amount":60}]},{"id":"limestone","name":"Limestone","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Limestone","amount":60}]},{"id":"coal","name":"Coal","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Coal","amount":60}]},{"id":"caterium_ore","name":"Caterium Ore","machine":"miner","craftingTimeSeconds":1,"inputs":[],"outputs":[{"item":"Caterium Ore","amount":60}]},{"id":"iron_ingot","name":"Iron Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Iron Ore","amount":1}],"outputs":[{"item":"Iron Ingot","amount":1}]},{"id":"copper_ingot","name":"Copper Ingot","machine":"smelter","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ore","amount":1}],"outputs":[{"item":"Copper Ingot","amount":1}]},{"id":"caterium_ingot","name":"Caterium Ingot","machine":"smelter","craftingTimeSeconds":4,"inputs":[{"item":"Caterium Ore","amount":3}],"outputs":[{"item":"Caterium Ingot","amount":1}]},{"id":"iron_plate","name":"Iron Plate","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Ingot","amount":3}],"outputs":[{"item":"Iron Plate","amount":2}]},{"id":"iron_rod","name":"Iron Rod","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Iron Ingot","amount":1}],"outputs":[{"item":"Iron Rod","amount":1}]},{"id":"screw","name":"Screw","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Iron Rod","amount":1}],"outputs":[{"item":"Screw","amount":4}]},{"id":"concrete","name":"Concrete","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Limestone","amount":3}],"outputs":[{"item":"Concrete","amount":1}]},{"id":"copper_sheet","name":"Copper Sheet","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Copper Ingot","amount":2}],"outputs":[{"item":"Copper Sheet","amount":1}]},{"id":"wire","name":"Wire","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Copper Ingot","amount":1}],"outputs":[{"item":"Wire","amount":2}]},{"id":"cable_constructor","name":"Cable","machine":"constructor","craftingTimeSeconds":2,"inputs":[{"item":"Wire","amount":2}],"outputs":[{"item":"Cable","amount":1}]},{"id":"steel_beam","name":"Steel Beam","machine":"constructor","craftingTimeSeconds":4,"inputs":[{"item":"Steel Ingot","amount":4}],"outputs":[{"item":"Steel Beam","amount":1}]},{"id":"steel_pipe","name":"Steel Pipe","machine":"constructor","craftingTimeSeconds":6,"inputs":[{"item":"Steel Ingot","amount":3}],"outputs":[{"item":"Steel Pipe","amount":2}]},{"id":"quickwire","name":"Quickwire","machine":"constructor","craftingTimeSeconds":5,"inputs":[{"item":"Caterium Ingot","amount":1}],"outputs":[{"item":"Quickwire","amount":5}]},{"id":"reinforced_iron_plate","name":"Reinforced Iron Plate","machine":"assembler","craftingTimeSeconds":12,"inputs":[{"item":"Iron Plate","amount":4},{"item":"Screw","amount":8}],"outputs":[{"item":"Reinforced Iron Plate","amount":1}]},{"id":"modular_frame","name":"Modular Frame","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Reinforced Iron Plate","amount":4},{"item":"Iron Rod","amount":2}],"outputs":[{"item":"Modular Frame","amount":1}]},{"id":"rotor","name":"Rotor","machine":"assembler","craftingTimeSeconds":15,"inputs":[{"item":"Iron Rod","amount":3},{"item":"Screw","amount":6}],"outputs":[{"item":"Rotor","amount":1}]},{"id":"smart_plating","name":"Smart Plating","machine":"assembler","craftingTimeSeconds":30,"inputs":[{"item":"Reinforced Iron Plate","amount":2},{"item":"Rotor","amount":2}],"outputs":[{"item":"Smart Plating","amount":1}]},{"id":"cable","name":"Cable","machine":"assembler","craftingTimeSeconds":2,"inputs":[{"item":"Copper Ingot","amount":2},{"item":"Wire","amount":2}],"outputs":[{"item":"Cable","amount":2}]},{"id":"steel_ingot","name":"Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ore","amount":45},{"item":"Coal","amount":45}],"outputs":[{"item":"Steel Ingot","amount":45}]},{"id":"solid_steel_ingot","name":"Solid Steel Ingot","machine":"foundry","craftingTimeSeconds":3,"inputs":[{"item":"Iron Ingot","amount":20},{"item":"Coal","amount":20}],"outputs":[{"item":"Solid Steel Ingot","amount":60}]},{"id":"plastic","name":"Plastic","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Plastic","amount":20}]},{"id":"rubber","name":"Rubber","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":30},{"item":"Fuel","amount":20}],"outputs":[{"item":"Rubber","amount":20}]},{"id":"fuel","name":"Fuel","machine":"refinery","craftingTimeSeconds":6,"inputs":[{"item":"Crude Oil","amount":60},{"item":"Water","amount":40}],"outputs":[{"item":"Fuel","amount":40}]}]};
 
 function init() {
   setupCanvasContextMenu();

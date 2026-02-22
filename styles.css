@@ -232,6 +232,44 @@ button.active { background: var(--accent-dark); color: white; }
 .port.input-3 { top: 70%; }
 .port.input-4 { top: 90%; }
 
+/* Input port with requirement label to the LEFT of the dot (dot unchanged) */
+.port-input-wrap {
+  position: absolute;
+  right: calc(100% - 6px);  /* wrap right edge at 6px from node left → dot stays at -10px */
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.port-input-wrap .port {
+  position: static;
+  left: auto;
+  top: auto;
+  transform: none;
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+.port-input-wrap.input-1 { top: 30%; }
+.port-input-wrap.input-2 { top: 50%; }
+.port-input-wrap.input-3 { top: 70%; }
+.port-input-wrap.input-4 { top: 90%; }
+.port-input-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: none;
+  margin-left: -56px;
+}
+.port-input-label.visible {
+  display: inline;
+}
+
 #svg-container {
   position: absolute;
   inset: 0;
@@ -636,6 +674,17 @@ button.active { background: var(--accent-dark); color: white; }
 #edit-dialog select:focus {
   outline: none;
   border-color: var(--accent);
+}
+#edit-dialog-recipe-inputs {
+  font-size: 0.9em;
+  color: var(--text-muted, #888);
+  margin: 0.25rem 0 0.5rem;
+  min-height: 1.25em;
+}
+#edit-dialog-recipe-inputs:not(:empty)::before {
+  content: "Inputs needed: ";
+  font-weight: 600;
+  color: var(--text, inherit);
 }
 #edit-dialog-actions {
   display: flex;
