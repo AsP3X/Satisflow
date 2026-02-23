@@ -24,6 +24,7 @@
   let APP_CONFIG = null;
   let machinesList = [];
   let recipeListByMachine = {};
+  let machineAllowedItems = {};
 
   const MACHINE_ICONS = {
     miner: '⛏',
@@ -57,6 +58,7 @@
     if (!APP_CONFIG || !APP_CONFIG.machines || !APP_CONFIG.recipes) return;
     machinesList = [];
     recipeListByMachine = {};
+    machineAllowedItems = {};
     for (const [type, def] of Object.entries(APP_CONFIG.machines)) {
       const name = def.name || type;
       (def.tiers || []).forEach(tier => {
@@ -87,6 +89,42 @@
         outPerMin
       });
     }
+    for (const [type, def] of Object.entries(APP_CONFIG.machines)) {
+      const fromConfigIn = def.allowedInputItems && Array.isArray(def.allowedInputItems) ? def.allowedInputItems : null;
+      const fromConfigOut = def.allowedOutputItems && Array.isArray(def.allowedOutputItems) ? def.allowedOutputItems : null;
+      if (fromConfigIn && fromConfigOut) {
+        machineAllowedItems[type] = {
+          input: new Set(fromConfigIn),
+          output: new Set(fromConfigOut)
+        };
+      } else {
+        const input = new Set();
+        const output = new Set();
+        const recipes = recipeListByMachine[type] || [];
+        recipes.forEach(r => {
+          (r.outputs || []).forEach(o => { if (o?.item) output.add(o.item); });
+          (r.inputs || []).forEach(i => { if (i?.item) input.add(i.item); });
+        });
+        machineAllowedItems[type] = {
+          input: fromConfigIn ? new Set(fromConfigIn) : input,
+          output: fromConfigOut ? new Set(fromConfigOut) : output
+        };
+      }
+    }
+  }
+
+  function machineCanAcceptItem(type, item) {
+    const allowed = machineAllowedItems[type];
+    if (!allowed) return true;
+    if (allowed.input.has('Any')) return true;
+    return allowed.input.has(item);
+  }
+
+  function machineCanProduceItem(type, item) {
+    const allowed = machineAllowedItems[type];
+    if (!allowed) return true;
+    if (allowed.output.has('Any')) return true;
+    return allowed.output.has(item);
   }
 
   function getMinerOreQualities() {
@@ -1145,8 +1183,39 @@
     addConnectY = y;
     const listEl = document.getElementById('modal-add-list');
     listEl.innerHTML = '';
-    const excludeMiner = sourcePort.dataset.portKind === 'output';
-    const list = excludeMiner ? machinesList.filter(m => m.type !== 'miner') : machinesList;
+    const sourceIsOutput = sourcePort.dataset.portKind === 'output';
+    let contextItem = null;
+    if (sourceIsOutput) {
+      const srcNode = sourcePort.closest('.node');
+      contextItem = srcNode?.dataset?.item || null;
+    } else {
+      const targetNode = sourcePort.closest('.node');
+      if (targetNode) {
+        const recipe = getRecipeForNode(targetNode);
+        const wrap = sourcePort.closest('.port-wrap');
+        const match = wrap?.className?.match(/input-(\d+)/);
+        const portIndex = match ? parseInt(match[1], 10) - 1 : 0;
+        if (recipe?.inputs?.[portIndex]?.item) contextItem = recipe.inputs[portIndex].item;
+      }
+    }
+    const list = machinesList.filter(m => {
+      if (sourceIsOutput) {
+        if (m.type === 'miner') return false;
+        return contextItem ? machineCanAcceptItem(m.type, contextItem) : true;
+      }
+      return contextItem ? machineCanProduceItem(m.type, contextItem) : true;
+    });
+    const emptyEl = document.getElementById('modal-add-empty');
+    if (emptyEl) {
+      if (list.length === 0) {
+        emptyEl.textContent = contextItem
+          ? (sourceIsOutput ? `No buildings accept "${contextItem}".` : `No buildings produce "${contextItem}".`)
+          : 'No buildings match.';
+        emptyEl.hidden = false;
+      } else {
+        emptyEl.hidden = true;
+      }
+    }
     list.forEach(({ type, tierId, label, icon }) => {
       const btn = document.createElement('button');
       btn.type = 'button';

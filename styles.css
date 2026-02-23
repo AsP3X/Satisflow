@@ -793,6 +793,12 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.modal-add-empty {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin: 8px 0 12px;
+}
+
 .modal-add .modal-add-list {
   max-height: 320px;
   overflow-y: auto;

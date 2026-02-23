@@ -4,6 +4,8 @@
       "name": "Miner",
       "inputCount": 0,
       "outputCount": 1,
+      "allowedInputItems": [],
+      "allowedOutputItems": ["Iron Ore", "Copper Ore", "Limestone", "Coal", "Caterium Ore"],
       "oreQualities": [
         { "id": "impure", "name": "Impure", "multiplier": 0.5 },
         { "id": "normal", "name": "Normal", "multiplier": 1 },
@@ -19,6 +21,8 @@
       "name": "Smelter",
       "inputCount": 1,
       "outputCount": 1,
+      "allowedInputItems": ["Iron Ore", "Copper Ore", "Caterium Ore"],
+      "allowedOutputItems": ["Iron Ingot", "Copper Ingot", "Caterium Ingot"],
       "tiers": [
         { "id": "mk1", "name": "Mk.1", "craftingSpeed": 1 },
         { "id": "mk2", "name": "Mk.2", "craftingSpeed": 2 },
@@ -29,6 +33,8 @@
       "name": "Constructor",
       "inputCount": 2,
       "outputCount": 1,
+      "allowedInputItems": ["Iron Ingot", "Copper Ingot", "Caterium Ingot", "Limestone", "Iron Rod", "Wire", "Steel Ingot"],
+      "allowedOutputItems": ["Iron Plate", "Iron Rod", "Screw", "Concrete", "Copper Sheet", "Wire", "Cable", "Steel Beam", "Steel Pipe", "Quickwire"],
       "tiers": [
         { "id": "mk1", "name": "Mk.1", "craftingSpeed": 1 },
         { "id": "mk2", "name": "Mk.2", "craftingSpeed": 2 },
@@ -39,6 +45,8 @@
       "name": "Assembler",
       "inputCount": 2,
       "outputCount": 1,
+      "allowedInputItems": ["Iron Plate", "Screw", "Iron Rod", "Reinforced Iron Plate", "Copper Ingot", "Wire", "Modular Frame", "Rotor"],
+      "allowedOutputItems": ["Reinforced Iron Plate", "Modular Frame", "Rotor", "Smart Plating", "Cable"],
       "tiers": [
         { "id": "mk1", "name": "Mk.1", "craftingSpeed": 1 },
         { "id": "mk2", "name": "Mk.2", "craftingSpeed": 2 },
@@ -49,6 +57,8 @@
       "name": "Foundry",
       "inputCount": 2,
       "outputCount": 1,
+      "allowedInputItems": ["Iron Ore", "Coal", "Iron Ingot"],
+      "allowedOutputItems": ["Steel Ingot", "Solid Steel Ingot"],
       "tiers": [
         { "id": "mk1", "name": "Mk.1", "craftingSpeed": 1 },
         { "id": "mk2", "name": "Mk.2", "craftingSpeed": 2 },
@@ -59,6 +69,8 @@
       "name": "Refinery",
       "inputCount": 3,
       "outputCount": 1,
+      "allowedInputItems": ["Crude Oil", "Fuel", "Water"],
+      "allowedOutputItems": ["Plastic", "Rubber", "Fuel"],
       "tiers": [
         { "id": "mk1", "name": "Mk.1", "craftingSpeed": 1 },
         { "id": "mk2", "name": "Mk.2", "craftingSpeed": 2 },
@@ -69,6 +81,8 @@
       "name": "Storage Container",
       "inputCount": 1,
       "outputCount": 1,
+      "allowedInputItems": ["Any"],
+      "allowedOutputItems": ["Any"],
       "slots": 24,
       "maxItems": 12000,
       "tiers": [
@@ -79,6 +93,8 @@
       "name": "Splitter",
       "inputCount": 1,
       "outputCount": 3,
+      "allowedInputItems": ["Any"],
+      "allowedOutputItems": ["Any"],
       "tiers": [
         { "id": "mk1", "name": "Mk.1", "maxFlowPerMin": 60 },
         { "id": "mk2", "name": "Mk.2", "maxFlowPerMin": 120 },
@@ -92,6 +108,8 @@
       "name": "Merger",
       "inputCount": 3,
       "outputCount": 1,
+      "allowedInputItems": ["Any"],
+      "allowedOutputItems": ["Any"],
       "tiers": [
         { "id": "mk1", "name": "Mk.1", "maxFlowPerMin": 60 },
         { "id": "mk2", "name": "Mk.2", "maxFlowPerMin": 120 },
