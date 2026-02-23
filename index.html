@@ -2,105 +2,143 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Satisfactory · Production Flow Designer</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
-  <link rel="stylesheet" href="styles.css"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Satisflow · Production Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <div class="app">
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-icon">◇</span>
+        <h1 class="brand-title">Satisflow</h1>
+        <span class="brand-subtitle">Production Calculator</span>
+      </div>
+      <div class="header-actions">
+        <span id="config-status" class="config-status" aria-live="polite"></span>
+        <button id="btn-calculate" type="button" class="btn btn-primary">
+          <span class="btn-icon">∑</span>
+          Calculate rates
+        </button>
+        <button id="btn-export" type="button" class="btn btn-ghost">Export</button>
+        <button id="btn-import" type="button" class="btn btn-ghost">Import</button>
+        <button id="btn-shortcuts" type="button" class="btn btn-icon" title="Shortcuts">⌘</button>
+        <button id="btn-theme" type="button" class="btn btn-icon" title="Theme">◐</button>
+      </div>
+    </header>
+    <input type="file" id="file-import" accept=".json,application/json" hidden />
 
-<header>
-  <div class="logo">Satisfactory Production Designer</div>
-  <div class="controls">
-    <button id="theme-toggle" title="Toggle theme" aria-label="Toggle dark/light theme"><i class="fas fa-moon"></i></button>
-    <button id="calc-btn">Calculate</button>
-    <button id="export-btn">Export</button>
-    <button id="import-btn">Import</button>
-  </div>
-</header>
-<input type="file" id="import-file-input" accept=".json,application/json" style="display: none" />
+    <div class="workspace">
+      <aside class="palette">
+        <h2 class="palette-title">Buildings</h2>
+        <p class="palette-hint">Right‑click canvas to add</p>
+        <div id="palette-list" class="palette-list"></div>
+      </aside>
 
-<div id="main">
-  <aside id="node-storage-sidebar">
-    <h3 class="node-storage-title">Nodes</h3>
-    <div id="node-storage-list"></div>
-  </aside>
-  <div id="canvas-wrapper">
-    <div id="canvas">
-      <svg id="svg-container"></svg>
-    </div>
-
-    <div id="zoom-controls">
-      <button id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
-      <button id="zoom-out" title="Zoom out" aria-label="Zoom out">-</button>
-      <button id="zoom-reset" title="Reset zoom" aria-label="Reset zoom to 1:1">1:1</button>
-      <button id="zoom-fit" title="Fit all" aria-label="Zoom to fit all nodes">Fit</button>
-      <button id="zoom-selection" title="Zoom selection" aria-label="Zoom to selected nodes">Sel</button>
-    </div>
-  </div>
-</div>
-
-<div id="node-context-menu" class="ctx-menu">
-  <button type="button" class="ctx-item" data-action="edit"><i class="fas fa-pen"></i> Edit</button>
-  <button type="button" class="ctx-item" data-action="clear"><i class="fas fa-unlink"></i> Clear Connections</button>
-  <button type="button" class="ctx-item delete" data-action="delete"><i class="fas fa-trash"></i> Delete</button>
-</div>
-
-<div id="canvas-rightclick-menu" class="ctx-menu" aria-label="Canvas menu">
-  <button type="button" class="ctx-item" data-action="node-window"><i class="fas fa-plus-square"></i> Node Window</button>
-</div>
-
-<div id="canvas-context-menu" class="ctx-menu" aria-label="Add building">
-  <div id="canvas-context-menu-header" class="ctx-menu-header">
-    <span class="ctx-menu-title">Add building</span>
-    <input type="text" id="canvas-context-menu-search" class="ctx-menu-search" placeholder="Search..." autocomplete="off" />
-    <button type="button" id="canvas-context-menu-close" class="ctx-menu-close" title="Close" aria-label="Close"><i class="fas fa-times"></i></button>
-  </div>
-  <div class="ctx-menu-body">
-    <div id="canvas-context-menu-categories" class="ctx-menu-categories"></div>
-    <div id="canvas-context-menu-items" class="ctx-menu-items"></div>
-  </div>
-  <div id="canvas-context-menu-resize" class="ctx-menu-resize" aria-label="Resize"></div>
-</div>
-
-<div id="edit-dialog-overlay">
-  <div id="edit-dialog">
-    <h3>Edit building</h3>
-    <label for="edit-dialog-name">Name</label>
-    <input type="text" id="edit-dialog-name" placeholder="Building name" />
-    <label for="edit-dialog-production">Production</label>
-    <select id="edit-dialog-production"></select>
-    <div id="edit-dialog-recipe-inputs" class="edit-dialog-recipe-inputs" aria-live="polite"></div>
-    <label for="edit-dialog-rate">Rate (/ min)</label>
-    <input type="text" id="edit-dialog-rate" inputmode="decimal" placeholder="0" />
-    <div id="edit-dialog-ore-quality-wrap" class="edit-dialog-miner-only" style="display: none;">
-      <label for="edit-dialog-ore-quality">Ore node quality</label>
-      <select id="edit-dialog-ore-quality"></select>
-    </div>
-    <div id="edit-dialog-actions">
-      <button type="button" id="edit-dialog-cancel">Cancel</button>
-      <button type="button" id="edit-dialog-save">Save</button>
+      <main class="canvas-area">
+        <div id="canvas-backdrop" class="canvas-backdrop"></div>
+        <div id="empty-state" class="empty-state" aria-hidden="false">
+          <div class="empty-state-icon">◇</div>
+          <p>Right‑click on the canvas to add a building</p>
+          <p class="empty-state-sub">or choose from the palette and place when connecting.</p>
+        </div>
+        <div id="canvas-root" class="canvas-root">
+          <svg id="canvas-svg" class="canvas-svg" aria-hidden="true"></svg>
+          <div id="canvas-nodes" class="canvas-nodes"></div>
+        </div>
+        <div class="zoom-bar">
+          <button id="zoom-in" type="button" class="zoom-btn" title="Zoom in">+</button>
+          <button id="zoom-out" type="button" class="zoom-btn" title="Zoom out">−</button>
+          <button id="zoom-reset" type="button" class="zoom-btn" title="Reset">1:1</button>
+          <button id="zoom-fit" type="button" class="zoom-btn" title="Fit all">⊡</button>
+        </div>
+      </main>
     </div>
   </div>
-</div>
 
-<div id="add-node-dialog-overlay">
-  <div id="add-node-dialog" class="add-node-dialog-card">
-    <div class="add-node-dialog-header">
-      <span class="add-node-dialog-icon" aria-hidden="true">⊕</span>
-      <div class="add-node-dialog-header-text">
-        <h3 id="add-node-dialog-title">Add building</h3>
-        <p id="add-node-dialog-hint" class="add-node-dialog-hint">Choose a building to place here.</p>
+  <!-- Context: canvas right‑click -->
+  <div id="menu-canvas" class="menu" role="menu" aria-hidden="true">
+    <button type="button" class="menu-item" data-action="add-building">
+      <span class="menu-item-icon">+</span>
+      Add building here
+    </button>
+  </div>
+
+  <!-- Context: add building at position (picker) -->
+  <div id="picker-overlay" class="overlay" aria-hidden="true">
+    <div id="picker-card" class="picker-card">
+      <div class="picker-head">
+        <h3>Add building</h3>
+        <input type="text" id="picker-search" class="picker-search" placeholder="Search..." autocomplete="off" />
+        <button type="button" id="picker-close" class="picker-close" aria-label="Close">×</button>
+      </div>
+      <div class="picker-tabs" id="picker-tabs"></div>
+      <div class="picker-items" id="picker-items"></div>
+    </div>
+  </div>
+
+  <!-- Context: node right‑click -->
+  <div id="menu-node" class="menu" role="menu" aria-hidden="true">
+    <button type="button" class="menu-item" data-action="edit">Edit</button>
+    <button type="button" class="menu-item" data-action="clear">Clear connections</button>
+    <button type="button" class="menu-item menu-item-danger" data-action="delete">Delete</button>
+  </div>
+
+  <!-- Edit node modal -->
+  <div id="modal-edit-overlay" class="overlay" aria-hidden="true">
+    <div id="modal-edit" class="modal">
+      <h3>Edit building</h3>
+      <label for="edit-name">Name</label>
+      <input type="text" id="edit-name" placeholder="Optional label" />
+      <label for="edit-recipe">Recipe / Output</label>
+      <select id="edit-recipe"></select>
+      <div id="edit-recipe-hint" class="edit-hint"></div>
+      <label for="edit-rate">Target output (/min)</label>
+      <input type="text" id="edit-rate" inputmode="decimal" placeholder="0" />
+      <div id="edit-ore-wrap" class="edit-ore-wrap" hidden>
+        <label for="edit-ore">Node purity</label>
+        <select id="edit-ore"></select>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="edit-cancel" class="btn btn-ghost">Cancel</button>
+        <button type="button" id="edit-save" class="btn btn-primary">Save</button>
       </div>
     </div>
-    <div id="add-node-dialog-list" class="add-node-dialog-list"></div>
-    <div class="add-node-dialog-actions">
-      <button type="button" id="add-node-dialog-cancel" class="add-node-dialog-cancel">Cancel</button>
+  </div>
+
+  <!-- Add & connect (when dropping connection on empty space) -->
+  <div id="modal-add-overlay" class="overlay" aria-hidden="true">
+    <div id="modal-add" class="modal modal-add">
+      <h3>Add building & connect</h3>
+      <div id="modal-add-list" class="modal-add-list"></div>
+      <div class="modal-actions">
+        <button type="button" id="add-cancel" class="btn btn-ghost">Cancel</button>
+      </div>
     </div>
   </div>
-</div>
 
-<div id="toast" role="status" aria-live="polite"></div>
-<script src="script.js"></script>
+  <!-- Shortcuts -->
+  <div id="shortcuts-overlay" class="overlay" aria-hidden="true">
+    <div class="shortcuts-panel">
+      <h2>Shortcuts</h2>
+      <ul class="shortcuts-list">
+        <li><kbd>⌘</kbd><kbd>Z</kbd> Undo</li>
+        <li><kbd>⌘</kbd><kbd>Shift</kbd><kbd>Z</kbd> Redo</li>
+        <li><kbd>Delete</kbd> Remove selected</li>
+        <li><kbd>Esc</kbd> Close / Deselect</li>
+        <li><kbd>?</kbd> This panel</li>
+        <li>Alt + drag · Pan</li>
+        <li>Scroll · Zoom</li>
+      </ul>
+      <button type="button" id="shortcuts-close" class="btn btn-ghost">Close</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="script.js"></script>
 </body>
 </html>
